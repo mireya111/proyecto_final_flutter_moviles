@@ -163,16 +163,16 @@ class _MapaPageState extends State<MapaPage> {
           final loc = await Supabase.instance.client
               .from('locations')
               .select('status')
-              .eq('usuario', userIdActual!)
+              .eq('id_user', userIdActual!)
               .maybeSingle();
           if (loc != null && loc['status'] == true) {
             await Supabase.instance.client.from('locations').upsert({
-              'usuario': userIdActual,
-              'latitud': pos.latitude,
-              'longitud': pos.longitude,
+              'id_user': userIdActual,
+              'latitude': pos.latitude,
+              'longitude': pos.longitude,
               'timestamp': DateTime.now().toIso8601String(),
               'status': true,
-            }, onConflict: 'usuario');
+            }, onConflict: 'id_user');
           }
         } catch (e) {
           print('Error actualizando location: $e');

@@ -65,6 +65,7 @@ class _RegisterPageState extends State<RegisterPage> {
             'username': username,
             'email': email,
             'password': password, // En producción, nunca guardes contraseñas en texto plano.
+            'created_at': DateTime.now().toIso8601String(),
           });
 
       // 2. Buscar el usuario recién creado para obtener su id
@@ -79,9 +80,9 @@ class _RegisterPageState extends State<RegisterPage> {
         try {
           final pos = await Geolocator.getCurrentPosition();
           await Supabase.instance.client.from('locations').insert({
-            'usuario': userRecord['id'],
-            'latitud': pos.latitude,
-            'longitud': pos.longitude,
+            'id_user': userRecord['id'],
+            'latitude': pos.latitude,
+            'longitude': pos.longitude,
             'timestamp': DateTime.now().toIso8601String(),
             'status': false,
           });

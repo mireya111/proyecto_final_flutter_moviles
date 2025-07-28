@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'crear_proyecto_page.dart';
-import 'mapa_page.dart';
 import 'ver_proyecto_page.dart';
 import 'sesion.dart';
 
@@ -18,7 +17,7 @@ class HomePage extends StatelessWidget {
             icon: const Icon(Icons.logout),
             onPressed: () async {
               if (userIdActual != null) {
-                await Supabase.instance.client.from('locations').update({'status': false}).eq('usuario', userIdActual!);
+                await Supabase.instance.client.from('locations').update({'status': false}).eq('id_user', userIdActual!);
               }
               await Supabase.instance.client.auth.signOut();
               Navigator.pushReplacementNamed(context, '/login');
@@ -58,7 +57,7 @@ class HomePage extends StatelessWidget {
                       Text('Descripción: ${proyecto['descripcion'] ?? ''}'),
                       Text('Colaborativo: ${proyecto['colaborativo'] == true ? 'Sí' : 'No'}'),
                       Text('Área: ${proyecto['area'] ?? 'No calculada'}'),
-                      Text('Fecha creación: ${proyecto['creado_en'] ?? ''}'),
+                      Text('Fecha creación: ${proyecto['created_at'] ?? ''}'),
                       Text('ID: ${proyecto['id'] ?? ''}'),
                       if (proyecto['imagen_poligono'] != null && (proyecto['imagen_poligono'] as String).isNotEmpty)
                         Padding(

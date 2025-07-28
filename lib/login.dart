@@ -46,7 +46,7 @@ class _LoginPageState extends State<LoginPage> {
         await Supabase.instance.client
             .from('locations')
             .update({'status': true})
-            .eq('usuario', userId);
+            .eq('id_user', userId);
 
         // Redirigir al home
         if (mounted) {

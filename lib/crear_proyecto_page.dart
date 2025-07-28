@@ -22,12 +22,12 @@ class _CrearProyectoPageState extends State<CrearProyectoPage> {
     // Traer usuarios activos con join para obtener el username
     final usuarios = await Supabase.instance.client
         .from('locations')
-        .select('usuario, users(username)')
+        .select('id_user, users(username)')
         .eq('status', true);
     setState(() {
       usuariosActivos = usuarios;
       // Eliminar seleccionados que ya no están activos
-      seleccionados = seleccionados.where((s) => usuarios.any((u) => u['usuario'] == s)).toList();
+      seleccionados = seleccionados.where((s) => usuarios.any((u) => u['id_user'] == s)).toList();
     });
   }
 
@@ -113,17 +113,17 @@ class _CrearProyectoPageState extends State<CrearProyectoPage> {
                           title: Text(
                             (u['users'] != null && u['users']['username'] != null)
                               ? u['users']['username']
-                              : u['usuario'].toString()
+                              : u['id_user'].toString()
                           ),
-                          value: seleccionados.contains(u['usuario']),
+                          value: seleccionados.contains(u['id_user']),
                           onChanged: (checked) {
                             setState(() {
                               if (checked == true) {
-                                if (!seleccionados.contains(u['usuario'])) {
-                                  seleccionados.add(u['usuario']);
+                                if (!seleccionados.contains(u['id_user'])) {
+                                  seleccionados.add(u['id_user']);
                                 }
                               } else {
-                                seleccionados.remove(u['usuario']);
+                                seleccionados.remove(u['id_user']);
                               }
                             });
                           },

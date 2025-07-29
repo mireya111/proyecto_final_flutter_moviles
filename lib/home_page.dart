@@ -24,6 +24,7 @@ class HomePage extends StatelessWidget {
         .select()
         .contains('participantes', [userIdActual])
         .neq('creador', userIdActual!)
+        .neq('finalizado', true) // Excluir proyectos finalizados
         .order('created_at', ascending: false);
   }
 
@@ -106,49 +107,114 @@ class HomePage extends StatelessWidget {
         if (territorios.isEmpty) {
           return const Center(child: Text('No tienes proyectos aún'));
         }
-        return ListView.builder(
-          itemCount: territorios.length,
-          itemBuilder: (context, index) {
-            final territorio = territorios[index];
-            return Card(
-              margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-              child: ListTile(
-                title: Text(territorio['nombre'] ?? ''),
-                subtitle: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text('Propiedades: ${territorio['propieties'] ?? ''}'),
-                    Text(
-                      'Colaborativo: ${territorio['colaborativo'] == true ? 'Sí' : 'No'}',
-                    ),
-                    Text('Área: ${territorio['area'] ?? 'No calculada'}'),
-                    Text(
-                      'Fecha creación: ${_formatearFecha(territorio['created_at'])}',
-                    ),
-                    if (territorio['imagen_polig'] != null &&
-                        (territorio['imagen_polig'] as String).isNotEmpty)
-                      Padding(
-                        padding: const EdgeInsets.only(top: 8.0),
-                        child: ClipRRect(
-                          borderRadius: BorderRadius.circular(8),
-                          child: Image.network(
-                            territorio['imagen_polig'],
-                            height: 120,
-                            width: double.infinity,
-                            fit: BoxFit.cover,
-                            errorBuilder: (context, error, stackTrace) =>
-                                const Text('No se pudo cargar la imagen'),
-                          ),
-                        ),
-                      ),
-                  ],
+
+        // Dividir los proyectos en "en proceso" y "finalizados"
+        final proyectosEnProceso = territorios
+            .where((t) => t['finalizado'] != true)
+            .toList();
+        final proyectosFinalizados = territorios
+            .where((t) => t['finalizado'] == true)
+            .toList();
+
+        return ListView(
+          children: [
+            // Sección de proyectos en proceso
+            if (proyectosEnProceso.isNotEmpty) ...[
+              const Padding(
+                padding: EdgeInsets.all(12.0),
+                child: Text(
+                  'Proyectos en proceso',
+                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
                 ),
-                isThreeLine: true,
               ),
-            );
-          },
+              ...proyectosEnProceso.map(
+                (territorio) => _buildProyectoCard(
+                  territorio,
+                  esFinalizado: false,
+                  context: context,
+                ),
+              ),
+            ],
+
+            // Sección de proyectos finalizados
+            if (proyectosFinalizados.isNotEmpty) ...[
+              const Padding(
+                padding: EdgeInsets.all(12.0),
+                child: Text(
+                  'Proyectos finalizados',
+                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                ),
+              ),
+              ...proyectosFinalizados.map(
+                (territorio) => _buildProyectoCard(
+                  territorio,
+                  esFinalizado: true,
+                  context: context,
+                ),
+              ),
+            ],
+          ],
         );
       },
+    );
+  }
+
+  Widget _buildProyectoCard(
+    Map<String, dynamic> territorio, {
+    required bool esFinalizado,
+    required BuildContext context,
+  }) {
+    return Card(
+      margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      child: ListTile(
+        title: Text(territorio['nombre'] ?? ''),
+        subtitle: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('Propiedades: ${territorio['propieties'] ?? ''}'),
+            Text(
+              'Colaborativo: ${territorio['colaborativo'] == true ? 'Sí' : 'No'}',
+            ),
+            Text('Área: ${territorio['area'] ?? 'No calculada'}'),
+            Text(
+              'Fecha creación: ${_formatearFecha(territorio['created_at'])}',
+            ),
+            if (territorio['imagen_polig'] != null &&
+                (territorio['imagen_polig'] as String).isNotEmpty)
+              Padding(
+                padding: const EdgeInsets.only(top: 8.0),
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(8),
+                  child: Image.network(
+                    territorio['imagen_polig'],
+                    height: 120,
+                    width: double.infinity,
+                    fit: BoxFit.cover,
+                    errorBuilder: (context, error, stackTrace) =>
+                        const Text('No se pudo cargar la imagen'),
+                  ),
+                ),
+              ),
+          ],
+        ),
+        isThreeLine: true,
+        trailing: esFinalizado
+            ? const Icon(Icons.lock, color: Colors.grey) // Icono de bloqueo
+            : IconButton(
+                icon: const Icon(Icons.map),
+                onPressed: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => MapaPage(
+                        proyectoId: territorio['id'], // ID del proyecto
+                        colaborativo: territorio['colaborativo'] ?? false,
+                      ),
+                    ),
+                  );
+                },
+              ),
+      ),
     );
   }
 

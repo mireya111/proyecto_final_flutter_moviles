@@ -33,6 +33,7 @@ class _MapaPageState extends State<MapaPage> {
   LatLng? ubicacionActual;
   bool cargandoUbicacion = false;
   bool finalizado = false;
+  String? creadorId;
 
   Uint8List? _imageBytes;
   String? _imageName;
@@ -48,6 +49,25 @@ class _MapaPageState extends State<MapaPage> {
     if (widget.colaborativo) {
       _cargarPuntosColaborativos();
       _iniciarActualizacionPuntosColaborativos();
+    }
+    _cargarCreador();
+  }
+
+  Future<void> _cargarCreador() async {
+    try {
+      final response = await Supabase.instance.client
+          .from('territories')
+          .select('creador')
+          .eq('id', widget.proyectoId)
+          .maybeSingle();
+
+      if (response != null && mounted) {
+        setState(() {
+          creadorId = response['creador'];
+        });
+      }
+    } catch (e) {
+      print('Error al cargar el creador: $e');
     }
   }
 
@@ -119,7 +139,54 @@ class _MapaPageState extends State<MapaPage> {
     super.dispose();
   }
 
-  void _showImagePickerDialog(StateSetter setStateDialog) {
+  Positioned _buildFinalizarButton() {
+    return Positioned(
+      bottom: 20,
+      right: 20,
+      child: ElevatedButton.icon(
+        onPressed: (puntos.length > 2 &&
+                !finalizado &&
+                userIdActual == creadorId) // Verifica si el usuario es el creador
+            ? () async {
+                if (puntos.isNotEmpty && puntos.first != puntos.last) {
+                  setState(() {
+                    puntos.add(puntos.first);
+                  });
+                  _dibujarPoligono();
+                }
+                final area = _calcularArea();
+                final puntoMedio = _calcularPuntoMedio();
+                final tipoFigura = _determinarTipoFigura();
+
+                try {
+                  await Supabase.instance.client
+                      .from('territories')
+                      .update({
+                        'area': area,
+                        'latitude': puntoMedio.latitude,
+                        'longitude': puntoMedio.longitude,
+                        'polygon': tipoFigura,
+                        'finalizado': true, // Marca el proyecto como finalizado
+                      })
+                      .eq('id', widget.proyectoId);
+
+                  setState(() => finalizado = true);
+
+                  if (context.mounted) {
+                    _mostrarModalFinalizar(context);
+                  }
+                } catch (e) {
+                  print('Error al finalizar el territorio: $e');
+                }
+              }
+            : null, // Deshabilita el botón si no cumple las condiciones
+        icon: const Icon(Icons.check_circle),
+        label: const Text('Finalizar Escaneo'),
+      ),
+    );
+  }
+
+  Future<void> _showImagePickerDialog(StateSetter setStateDialog) async {
     showDialog(
       context: context,
       builder: (BuildContext context) {
@@ -131,17 +198,17 @@ class _MapaPageState extends State<MapaPage> {
               ListTile(
                 leading: const Icon(Icons.photo_library),
                 title: const Text('Galería'),
-                onTap: () {
+                onTap: () async {
                   Navigator.pop(context);
-                  _pickImageFromGallery(setStateDialog);
+                  await _pickImageFromGallery(setStateDialog);
                 },
               ),
               ListTile(
                 leading: const Icon(Icons.camera_alt),
                 title: const Text('Cámara'),
-                onTap: () {
+                onTap: () async {
                   Navigator.pop(context);
-                  _pickImageFromCamera(setStateDialog);
+                  await _pickImageFromCamera(setStateDialog);
                 },
               ),
             ],
@@ -362,7 +429,7 @@ class _MapaPageState extends State<MapaPage> {
       case 10:
         return 'Decágono';
       default:
-        return 'Polígono';
+        return 'Círculo';
     }
   }
 
@@ -513,48 +580,7 @@ class _MapaPageState extends State<MapaPage> {
                     label: const Text('Marcar'),
                   ),
                 ),
-                Positioned(
-                  bottom: 20,
-                  right: 20,
-                  child: ElevatedButton.icon(
-                    onPressed: puntos.length > 2 && !finalizado
-                        ? () async {
-                            if (puntos.isNotEmpty &&
-                                puntos.first != puntos.last) {
-                              setState(() {
-                                puntos.add(puntos.first);
-                              });
-                              _dibujarPoligono();
-                            }
-                            final area = _calcularArea();
-                            final puntoMedio = _calcularPuntoMedio();
-                            final tipoFigura = _determinarTipoFigura();
-
-                            try {
-                              await Supabase.instance.client
-                                  .from('territories')
-                                  .update({
-                                    'area': area,
-                                    'latitude': puntoMedio.latitude,
-                                    'longitude': puntoMedio.longitude,
-                                    'polygon': tipoFigura,
-                                  })
-                                  .eq('id', widget.proyectoId);
-
-                              setState(() => finalizado = true);
-
-                              if (context.mounted) {
-                                _mostrarModalFinalizar(context);
-                              }
-                            } catch (e) {
-                              print('Error al finalizar el territorio: $e');
-                            }
-                          }
-                        : null,
-                    icon: const Icon(Icons.check_circle),
-                    label: const Text('Finalizar Escaneo'),
-                  ),
-                ),
+                _buildFinalizarButton(),
               ],
             ),
           ),
@@ -564,6 +590,7 @@ class _MapaPageState extends State<MapaPage> {
   }
 
   void _mostrarModalFinalizar(BuildContext context) {
+    bool cargandoImagen = false; // Variable para controlar el estado de carga
     showDialog(
       context: context,
       builder: (context) {
@@ -581,25 +608,38 @@ class _MapaPageState extends State<MapaPage> {
                       border: Border.all(color: Colors.grey),
                       borderRadius: BorderRadius.circular(8),
                     ),
-                    child: _imageBytes != null
-                        ? ClipRRect(
-                            borderRadius: BorderRadius.circular(8),
-                            child: Image.memory(
-                              _imageBytes!,
-                              fit: BoxFit.cover,
-                            ),
+                    child: cargandoImagen
+                        ? const Center(
+                            child: CircularProgressIndicator(), // Indicador de carga
                           )
-                        : const Center(
-                            child: Text(
-                              'No se ha seleccionado ninguna imagen',
-                              style: TextStyle(color: Colors.grey),
-                            ),
-                          ),
+                        : (_imageBytes != null
+                            ? ClipRRect(
+                                borderRadius: BorderRadius.circular(8),
+                                child: Image.memory(
+                                  _imageBytes!,
+                                  fit: BoxFit.cover,
+                                ),
+                              )
+                            : const Center(
+                                child: Text(
+                                  'No se ha seleccionado ninguna imagen',
+                                  style: TextStyle(color: Colors.grey),
+                                ),
+                              )),
                   ),
                   const SizedBox(height: 10),
                   ElevatedButton(
-                    onPressed: () =>
-                        _showImagePickerDialog(setStateDialog), // ✅ aquí
+                    onPressed: () async {
+                      setStateDialog(() {
+                        cargandoImagen = true; // Activa el estado de carga
+                      });
+
+                      await _showImagePickerDialog(setStateDialog);
+
+                      setStateDialog(() {
+                        cargandoImagen = false; // Desactiva el estado de carga
+                      });
+                    },
                     child: const Text('Seleccionar Imagen'),
                   ),
                 ],
@@ -643,20 +683,21 @@ class _MapaPageState extends State<MapaPage> {
   Future<void> _marcarUbicacionActual() async {
     if (ubicacionActual == null || finalizado) return;
 
-    if (userIdActual != null) {
-      try {
-        await Supabase.instance.client.from('puntos').insert({
-          'usuario': userIdActual,
-          'latitud': ubicacionActual!.latitude,
-          'longitud': ubicacionActual!.longitude,
-          'timestamp': DateTime.now().toIso8601String(),
-          'proyecto_id': widget.proyectoId,
-        });
-        await _cargarPuntosColaborativos();
-        _dibujarPoligono();
-      } catch (e) {
-        print('Error al insertar punto: $e');
-      }
+    try {
+      // Inserta la ubicación actual en la base de datos
+      await Supabase.instance.client.from('puntos').insert({
+        'usuario': userIdActual,
+        'latitud': ubicacionActual!.latitude,
+        'longitud': ubicacionActual!.longitude,
+        'timestamp': DateTime.now().toIso8601String(),
+        'proyecto_id': widget.proyectoId,
+      });
+
+      // Recarga los puntos colaborativos y actualiza el polígono
+      await _cargarPuntosColaborativos();
+      _dibujarPoligono();
+    } catch (e) {
+      print('Error al insertar punto: $e');
     }
   }
 }

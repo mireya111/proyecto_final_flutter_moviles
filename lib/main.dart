@@ -4,7 +4,6 @@ import 'login.dart';
 import 'home_page.dart';
 import 'crear_proyecto_page.dart';
 import 'mapa_page.dart';
-import 'ver_proyecto_page.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -39,12 +38,6 @@ class MyApp extends StatelessWidget {
               proyectoId: args['proyectoId'],
               colaborativo: args['colaborativo'],
             ),
-          );
-        }
-        if (settings.name == '/ver') {
-          final args = settings.arguments as Map<String, dynamic>;
-          return MaterialPageRoute(
-            builder: (_) => VerProyectoPage(proyecto: args['proyecto']),
           );
         }
         return null;

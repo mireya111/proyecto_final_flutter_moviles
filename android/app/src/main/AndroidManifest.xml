@@ -5,7 +5,8 @@
     <application
         android:label="Topografía DAM2"
         android:name="${applicationName}"
-        android:icon="@mipmap/ic_launcher">
+        android:icon="@mipmap/ic_launcher"
+        android:roundIcon="@mipmap/ic_launcher">
         <!-- API key de Google Maps -->
         <meta-data android:name="com.google.android.geo.API_KEY"
             android:value="AIzaSyAQkYHIJ8cYGNQNXTClHQenBIPWdTje0Z0"/>

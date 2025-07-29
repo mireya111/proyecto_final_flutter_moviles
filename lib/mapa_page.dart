@@ -1,9 +1,11 @@
 import 'dart:math';
+import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:geolocator/geolocator.dart';
-import 'package:file_picker/file_picker.dart';
+import 'package:image_picker/image_picker.dart';
+import 'package:image/image.dart' as img;
 import 'sesion.dart';
 
 class MapaPage extends StatefulWidget {
@@ -22,6 +24,7 @@ class MapaPage extends StatefulWidget {
 
 class _MapaPageState extends State<MapaPage> {
   bool mostrarCoordenadas = false;
+  bool mostrarBarraLateral = true;
   GoogleMapController? mapController;
   List<LatLng> puntos = [];
   final Set<Polygon> _poligonos = {};
@@ -31,6 +34,9 @@ class _MapaPageState extends State<MapaPage> {
   bool cargandoUbicacion = false;
   bool finalizado = false;
 
+  Uint8List? _imageBytes;
+  String? _imageName;
+
   @override
   void initState() {
     super.initState();
@@ -39,16 +45,115 @@ class _MapaPageState extends State<MapaPage> {
     _iniciarTrackingUbicacion();
     _iniciarActualizacionPoligonoColaborativo();
 
-    // Cargar puntos colaborativos al iniciar
     if (widget.colaborativo) {
       _cargarPuntosColaborativos();
       _iniciarActualizacionPuntosColaborativos();
     }
   }
 
+  Future<Uint8List> _resizeImage(Uint8List imageBytes) async {
+    final image = img.decodeImage(imageBytes);
+    if (image == null) throw Exception('No se pudo procesar la imagen');
+
+    final resized = img.copyResize(image, width: 1080, height: 1350);
+    return Uint8List.fromList(img.encodeJpg(resized, quality: 85));
+  }
+
+  Future<void> _pickImageFromGallery(StateSetter setStateDialog) async {
+    final picker = ImagePicker();
+    final result = await picker.pickImage(source: ImageSource.gallery);
+
+    if (result != null) {
+      final bytes = await result.readAsBytes();
+      final resizedBytes = await _resizeImage(bytes);
+
+      setState(() {
+        _imageBytes = resizedBytes;
+        _imageName = result.name;
+      });
+
+      setStateDialog(() {}); // Así se usa correctamente un StateSetter
+    }
+  }
+
+  Future<void> _pickImageFromCamera(StateSetter setStateDialog) async {
+    final picker = ImagePicker();
+    final result = await picker.pickImage(source: ImageSource.camera);
+
+    if (result != null) {
+      final bytes = await result.readAsBytes();
+      final resizedBytes = await _resizeImage(bytes);
+
+      setState(() {
+        _imageBytes = resizedBytes;
+        _imageName = 'camera_${DateTime.now().millisecondsSinceEpoch}.jpg';
+      });
+
+      setStateDialog(() {});
+    }
+  }
+
+  Future<String?> _uploadImage() async {
+    if (_imageBytes == null || _imageName == null) return null;
+
+    try {
+      final fileName =
+          'poligono_${widget.proyectoId}_${DateTime.now().millisecondsSinceEpoch}_$_imageName';
+      await Supabase.instance.client.storage
+          .from('uploads')
+          .uploadBinary(fileName, _imageBytes!);
+
+      final imageUrl = Supabase.instance.client.storage
+          .from('uploads')
+          .getPublicUrl(fileName);
+      return imageUrl;
+    } catch (e) {
+      throw Exception('Error al subir imagen: $e');
+    }
+  }
+
+  @override
+  void dispose() {
+    // Libera el controlador del mapa
+    mapController?.dispose();
+    super.dispose();
+  }
+
+  void _showImagePickerDialog(StateSetter setStateDialog) {
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: const Text('Seleccionar imagen'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              ListTile(
+                leading: const Icon(Icons.photo_library),
+                title: const Text('Galería'),
+                onTap: () {
+                  Navigator.pop(context);
+                  _pickImageFromGallery(setStateDialog);
+                },
+              ),
+              ListTile(
+                leading: const Icon(Icons.camera_alt),
+                title: const Text('Cámara'),
+                onTap: () {
+                  Navigator.pop(context);
+                  _pickImageFromCamera(setStateDialog);
+                },
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
   void _iniciarActualizacionPoligonoColaborativo() {
     Future.doWhile(() async {
-      if (!finalizado) {
+      if (!finalizado && mounted) {
         await _cargarPuntosColaborativos();
         _dibujarPoligono();
         await Future.delayed(const Duration(seconds: 2));
@@ -60,10 +165,12 @@ class _MapaPageState extends State<MapaPage> {
 
   void _iniciarActualizacionPuntosColaborativos() {
     Future.doWhile(() async {
-      if (!finalizado) {
+      if (!finalizado && mounted) {
         await _cargarPuntosColaborativos();
         _dibujarPoligono();
-        await Future.delayed(const Duration(seconds: 5)); // Actualizar cada 5 segundos
+        await Future.delayed(
+          const Duration(seconds: 5),
+        ); // Actualizar cada 5 segundos
         return true;
       }
       return false;
@@ -81,84 +188,64 @@ class _MapaPageState extends State<MapaPage> {
     setState(() => cargandoUbicacion = true);
     try {
       Position pos = await Geolocator.getCurrentPosition();
-      setState(() {
-        ubicacionActual = LatLng(pos.latitude, pos.longitude);
-        cargandoUbicacion = false;
-      });
+      if (mounted) {
+        setState(() {
+          ubicacionActual = LatLng(pos.latitude, pos.longitude);
+          cargandoUbicacion = false;
+        });
+      }
     } catch (e) {
       print('Error al obtener ubicación: $e');
     }
   }
 
-  Future<void> _subirImagenPoligono() async {
-    final result = await FilePicker.platform.pickFiles(withData: true);
-    if (result != null && result.files.single.bytes != null) {
-      final fileBytes = result.files.single.bytes!;
-      final fileName = 'poligono_${widget.proyectoId}_${DateTime.now().millisecondsSinceEpoch}.png';
+  Future<void> _cargarPuntosColaborativos() async {
+    try {
+      final puntosDB = await Supabase.instance.client
+          .from('puntos')
+          .select('latitud,longitud')
+          .eq('proyecto_id', widget.proyectoId);
+      if (mounted) {
+        setState(() {
+          puntos = List<LatLng>.from(
+            puntosDB.map((p) => LatLng(p['latitud'], p['longitud'])),
+          );
+        });
+      }
 
-      await Supabase.instance.client.storage
-          .from('uploads')
-          .uploadBinary(fileName, fileBytes);
-
-      final publicUrl = Supabase.instance.client.storage
-          .from('uploads')
-          .getPublicUrl(fileName);
-
-      await Supabase.instance.client
-          .from('proyectos')
-          .update({'imagen_poligono': publicUrl})
-          .eq('id', widget.proyectoId);
-
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Imagen subida correctamente')),
+      // Hacer zoom en el último punto cargado
+      if (puntos.isNotEmpty && mapController != null) {
+        await mapController!.animateCamera(
+          CameraUpdate.newLatLngZoom(puntos.last, 18), // Zoom nivel 18
         );
       }
+    } catch (e) {
+      print('Error al cargar puntos: $e');
     }
   }
-
-  Future<void> _cargarPuntosColaborativos() async {
-  try {
-    final puntosDB = await Supabase.instance.client
-        .from('puntos')
-        .select('latitud,longitud')
-        .eq('proyecto_id', widget.proyectoId);
-
-    setState(() {
-      puntos = List<LatLng>.from(
-        puntosDB.map((p) => LatLng(p['latitud'], p['longitud'])),
-      );
-    });
-
-    // Hacer zoom en el último punto cargado
-    if (puntos.isNotEmpty && mapController != null) {
-      await mapController!.animateCamera(
-        CameraUpdate.newLatLngZoom(puntos.last, 18), // Zoom nivel 18
-      );
-    }
-  } catch (e) {
-    print('Error al cargar puntos: $e');
-  }
-}
 
   void _dibujarPoligono() {
     _marcadores.clear();
     for (int i = 0; i < puntos.length; i++) {
-      _marcadores.add(Marker(
-        markerId: MarkerId('punto_$i'),
-        position: puntos[i],
-        infoWindow: InfoWindow(title: 'Punto ${i + 1}'),
-      ));
+      _marcadores.add(
+        Marker(
+          markerId: MarkerId('punto_$i'),
+          position: puntos[i],
+          infoWindow: InfoWindow(title: 'Punto ${i + 1}'),
+        ),
+      );
     }
 
     _polilineas.clear();
     if (puntos.length > 1) {
-      _polilineas.add(Polyline(
-        polylineId: const PolylineId('linea1'),
-        points: puntos,
-        color: Colors.blue,
-        width: 3,
-      ));
+      _polilineas.add(
+        Polyline(
+          polylineId: const PolylineId('linea1'),
+          points: puntos,
+          color: Colors.blue,
+          width: 3,
+        ),
+      );
     }
 
     _poligonos.clear();
@@ -173,7 +260,9 @@ class _MapaPageState extends State<MapaPage> {
       _poligonos.add(nuevoPoligono);
     }
 
-    setState(() {});
+    if (mounted) {
+      setState(() {});
+    }
   }
 
   void _iniciarTrackingUbicacion() {
@@ -241,12 +330,15 @@ class _MapaPageState extends State<MapaPage> {
       sumaLongitudes / puntos.length,
     );
 
-    print('Punto medio: Latitud ${puntoMedio.latitude}, Longitud ${puntoMedio.longitude}');
+    print(
+      'Punto medio: Latitud ${puntoMedio.latitude}, Longitud ${puntoMedio.longitude}',
+    );
     return puntoMedio;
   }
 
   String _determinarTipoFigura() {
-    final numPuntos = puntos.length - 1; // Excluir el punto repetido al cerrar el polígono
+    final numPuntos =
+        puntos.length - 1; // Excluir el punto repetido al cerrar el polígono
 
     if (!_esPoligonoRegular()) {
       return 'Polígono Irregular';
@@ -296,31 +388,57 @@ class _MapaPageState extends State<MapaPage> {
     return true;
   }
 
+  void _mostrarArea() {
+    final area = _calcularArea();
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Área del Territorio'),
+        content: Text('El área calculada es: ${area.toStringAsFixed(2)} m²'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('Cerrar'),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Mapa del Proyecto')),
+      appBar: AppBar(title: const Text('Mapa del Territorio')),
       body: Row(
         children: [
-          Expanded(
-            flex: 1,
-            child: Container(
-              color: Colors.grey[100],
-              child: Column(
-                children: [
-                  Padding(
-                    padding: const EdgeInsets.all(8.0),
-                    child: ElevatedButton.icon(
-                      onPressed: () {
-                        setState(() {
-                          mostrarCoordenadas = !mostrarCoordenadas;
-                        });
-                      },
-                      icon: Icon(mostrarCoordenadas ? Icons.visibility_off : Icons.visibility),
-                      label: Text(mostrarCoordenadas ? 'Ocultar coordenadas' : 'Ver coordenadas'),
+          if (mostrarBarraLateral)
+            Expanded(
+              flex: 1,
+              child: Container(
+                color: Colors.grey[100],
+                child: Column(
+                  children: [
+                    Padding(
+                      padding: const EdgeInsets.all(8.0),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          const Text(
+                            'Coordenadas',
+                            style: TextStyle(fontWeight: FontWeight.bold),
+                          ),
+                          IconButton(
+                            onPressed: () {
+                              setState(() {
+                                mostrarBarraLateral = false;
+                              });
+                            },
+                            icon: const Icon(Icons.visibility_off),
+                            tooltip: 'Ocultar coordenadas',
+                          ),
+                        ],
+                      ),
                     ),
-                  ),
-                  if (mostrarCoordenadas)
                     Expanded(
                       child: puntos.isEmpty
                           ? const Center(child: Text('No hay puntos todavía'))
@@ -329,18 +447,26 @@ class _MapaPageState extends State<MapaPage> {
                               itemBuilder: (context, index) {
                                 final p = puntos[index];
                                 return ListTile(
-                                  title: Text('Lat: ${p.latitude.toStringAsFixed(6)}'),
-                                  subtitle: Text('Lng: ${p.longitude.toStringAsFixed(6)}'),
+                                  title: Text(
+                                    'Lat: ${p.latitude.toStringAsFixed(6)}',
+                                  ),
+                                  subtitle: Text(
+                                    'Lng: ${p.longitude.toStringAsFixed(6)}',
+                                  ),
                                 );
                               },
                             ),
                     ),
-                ],
+                    ElevatedButton(
+                      onPressed: () => _mostrarArea(),
+                      child: const Text('Mostrar Área'),
+                    ),
+                  ],
+                ),
               ),
             ),
-          ),
           Expanded(
-            flex: 3,
+            flex: mostrarBarraLateral ? 3 : 1,
             child: Stack(
               children: [
                 GoogleMap(
@@ -350,7 +476,8 @@ class _MapaPageState extends State<MapaPage> {
                     _dibujarPoligono();
                   },
                   initialCameraPosition: CameraPosition(
-                    target: ubicacionActual ?? const LatLng(-0.22985, -78.52495),
+                    target:
+                        ubicacionActual ?? const LatLng(-0.22985, -78.52495),
                     zoom: 16,
                   ),
                   myLocationEnabled: true,
@@ -360,22 +487,40 @@ class _MapaPageState extends State<MapaPage> {
                   polylines: _polilineas,
                   mapType: MapType.normal,
                 ),
+                if (!mostrarBarraLateral)
+                  Positioned(
+                    top: 20,
+                    left: 20,
+                    child: FloatingActionButton(
+                      mini: true,
+                      onPressed: () {
+                        setState(() {
+                          mostrarBarraLateral = true;
+                        });
+                      },
+                      child: const Icon(Icons.visibility),
+                      tooltip: 'Mostrar coordenadas',
+                    ),
+                  ),
                 Positioned(
                   bottom: 80,
                   left: 20,
                   child: ElevatedButton.icon(
-                    onPressed: cargandoUbicacion || finalizado ? null : _marcarUbicacionActual,
+                    onPressed: cargandoUbicacion || finalizado
+                        ? null
+                        : _marcarUbicacionActual,
                     icon: const Icon(Icons.add_location),
                     label: const Text('Marcar'),
                   ),
                 ),
                 Positioned(
                   bottom: 20,
-                  left: 20,
+                  right: 20,
                   child: ElevatedButton.icon(
                     onPressed: puntos.length > 2 && !finalizado
                         ? () async {
-                            if (puntos.isNotEmpty && puntos.first != puntos.last) {
+                            if (puntos.isNotEmpty &&
+                                puntos.first != puntos.last) {
                               setState(() {
                                 puntos.add(puntos.first);
                               });
@@ -399,7 +544,7 @@ class _MapaPageState extends State<MapaPage> {
                               setState(() => finalizado = true);
 
                               if (context.mounted) {
-                                Navigator.pushNamedAndRemoveUntil(context, '/home', (route) => false);
+                                _mostrarModalFinalizar(context);
                               }
                             } catch (e) {
                               print('Error al finalizar el territorio: $e');
@@ -407,15 +552,7 @@ class _MapaPageState extends State<MapaPage> {
                           }
                         : null,
                     icon: const Icon(Icons.check_circle),
-                    label: const Text('Finalizar'),
-                  ),
-                ),
-                Positioned(
-                  top: 20,
-                  right: 20,
-                  child: ElevatedButton(
-                    onPressed: _calcularPuntoMedio,
-                    child: const Text('Calcular Punto Medio'),
+                    label: const Text('Finalizar Escaneo'),
                   ),
                 ),
               ],
@@ -423,6 +560,83 @@ class _MapaPageState extends State<MapaPage> {
           ),
         ],
       ),
+    );
+  }
+
+  void _mostrarModalFinalizar(BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (context, setStateDialog) {
+            return AlertDialog(
+              title: const Text('Finalizar Escaneo'),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(
+                    height: 150,
+                    width: double.infinity,
+                    decoration: BoxDecoration(
+                      border: Border.all(color: Colors.grey),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: _imageBytes != null
+                        ? ClipRRect(
+                            borderRadius: BorderRadius.circular(8),
+                            child: Image.memory(
+                              _imageBytes!,
+                              fit: BoxFit.cover,
+                            ),
+                          )
+                        : const Center(
+                            child: Text(
+                              'No se ha seleccionado ninguna imagen',
+                              style: TextStyle(color: Colors.grey),
+                            ),
+                          ),
+                  ),
+                  const SizedBox(height: 10),
+                  ElevatedButton(
+                    onPressed: () =>
+                        _showImagePickerDialog(setStateDialog), // ✅ aquí
+                    child: const Text('Seleccionar Imagen'),
+                  ),
+                ],
+              ),
+              actions: [
+                if (_imageBytes != null)
+                  ElevatedButton(
+                    onPressed: () async {
+                      final imageUrl = await _uploadImage();
+                      if (imageUrl != null) {
+                        await Supabase.instance.client
+                            .from('territories')
+                            .update({'imagen_poligono': imageUrl})
+                            .eq('id', widget.proyectoId);
+
+                        if (context.mounted) {
+                          Navigator.pushNamedAndRemoveUntil(
+                            context,
+                            '/home',
+                            (route) => false,
+                          );
+                        }
+                      }
+                    },
+                    child: const Text('Subir Imagen'),
+                  ),
+                ElevatedButton(
+                  onPressed: () {
+                    Navigator.of(context).pop();
+                  },
+                  child: const Text('Regresar al Proyecto'),
+                ),
+              ],
+            );
+          },
+        );
+      },
     );
   }
 
@@ -446,5 +660,3 @@ class _MapaPageState extends State<MapaPage> {
     }
   }
 }
-
-

@@ -10,7 +10,7 @@ class VerProyectoPage extends StatelessWidget {
     final LatLng centro = const LatLng(-0.22985, -78.52495);
 
     return Scaffold(
-      appBar: AppBar(title: Text(proyecto['nombre'] ?? 'Proyecto')),
+      appBar: AppBar(title: Text(proyecto['nombre'] ?? 'Territorio')),
       body: GoogleMap(
         initialCameraPosition: CameraPosition(target: centro, zoom: 15),
         myLocationEnabled: true,

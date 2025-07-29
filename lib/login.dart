@@ -120,24 +120,6 @@ class _LoginPageState extends State<LoginPage> {
                     ? const CircularProgressIndicator()
                     : const Text('Iniciar sesión'),
               ),
-              const SizedBox(height: 10),
-              TextButton(
-                onPressed: () async {
-                  final result =
-                      await Navigator.pushNamed(context, '/registro');
-                  if (result == true && mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(
-                        content:
-                            Text('¡Registro exitoso! Ahora puedes iniciar sesión.'),
-                        backgroundColor: Colors.green,
-                        duration: Duration(seconds: 3),
-                      ),
-                    );
-                  }
-                },
-                child: const Text('¿No tienes cuenta? Regístrate aquí'),
-              ),
             ],
           ),
         ),

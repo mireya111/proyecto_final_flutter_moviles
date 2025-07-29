@@ -1,8 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-
 import 'login.dart';
-import 'registro.dart';
 import 'home_page.dart';
 import 'crear_proyecto_page.dart';
 import 'mapa_page.dart';
@@ -30,7 +28,6 @@ class MyApp extends StatelessWidget {
       initialRoute: '/login',
       routes: {
         '/login': (context) => const LoginPage(),
-        '/registro': (context) => const RegisterPage(),
         '/home': (context) => const HomePage(),
         '/crear': (context) => const CrearProyectoPage(),
       },

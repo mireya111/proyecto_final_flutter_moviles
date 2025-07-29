@@ -1,3 +1,4 @@
+import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -37,6 +38,12 @@ class _MapaPageState extends State<MapaPage> {
     _obtenerUbicacion();
     _iniciarTrackingUbicacion();
     _iniciarActualizacionPoligonoColaborativo();
+
+    // Cargar puntos colaborativos al iniciar
+    if (widget.colaborativo) {
+      _cargarPuntosColaborativos();
+      _iniciarActualizacionPuntosColaborativos();
+    }
   }
 
   void _iniciarActualizacionPoligonoColaborativo() {
@@ -45,6 +52,18 @@ class _MapaPageState extends State<MapaPage> {
         await _cargarPuntosColaborativos();
         _dibujarPoligono();
         await Future.delayed(const Duration(seconds: 2));
+        return true;
+      }
+      return false;
+    });
+  }
+
+  void _iniciarActualizacionPuntosColaborativos() {
+    Future.doWhile(() async {
+      if (!finalizado) {
+        await _cargarPuntosColaborativos();
+        _dibujarPoligono();
+        await Future.delayed(const Duration(seconds: 5)); // Actualizar cada 5 segundos
         return true;
       }
       return false;
@@ -99,21 +118,28 @@ class _MapaPageState extends State<MapaPage> {
   }
 
   Future<void> _cargarPuntosColaborativos() async {
-    try {
-      final puntosDB = await Supabase.instance.client
-          .from('puntos')
-          .select('latitud,longitud')
-          .eq('proyecto_id', widget.proyectoId);
+  try {
+    final puntosDB = await Supabase.instance.client
+        .from('puntos')
+        .select('latitud,longitud')
+        .eq('proyecto_id', widget.proyectoId);
 
-      setState(() {
-        puntos = List<LatLng>.from(
-          puntosDB.map((p) => LatLng(p['latitud'], p['longitud'])),
-        );
-      });
-    } catch (e) {
-      print('Error al cargar puntos: $e');
+    setState(() {
+      puntos = List<LatLng>.from(
+        puntosDB.map((p) => LatLng(p['latitud'], p['longitud'])),
+      );
+    });
+
+    // Hacer zoom en el último punto cargado
+    if (puntos.isNotEmpty && mapController != null) {
+      await mapController!.animateCamera(
+        CameraUpdate.newLatLngZoom(puntos.last, 18), // Zoom nivel 18
+      );
     }
+  } catch (e) {
+    print('Error al cargar puntos: $e');
   }
+}
 
   void _dibujarPoligono() {
     _marcadores.clear();
@@ -194,6 +220,80 @@ class _MapaPageState extends State<MapaPage> {
       area -= poly[i + 1].latitude * poly[i].longitude;
     }
     return (area / 2).abs();
+  }
+
+  LatLng _calcularPuntoMedio() {
+    if (puntos.isEmpty) {
+      print('No hay puntos para calcular el punto medio.');
+      return const LatLng(0, 0);
+    }
+
+    double sumaLatitudes = 0;
+    double sumaLongitudes = 0;
+
+    for (var punto in puntos) {
+      sumaLatitudes += punto.latitude;
+      sumaLongitudes += punto.longitude;
+    }
+
+    final puntoMedio = LatLng(
+      sumaLatitudes / puntos.length,
+      sumaLongitudes / puntos.length,
+    );
+
+    print('Punto medio: Latitud ${puntoMedio.latitude}, Longitud ${puntoMedio.longitude}');
+    return puntoMedio;
+  }
+
+  String _determinarTipoFigura() {
+    final numPuntos = puntos.length - 1; // Excluir el punto repetido al cerrar el polígono
+
+    if (!_esPoligonoRegular()) {
+      return 'Polígono Irregular';
+    }
+
+    switch (numPuntos) {
+      case 3:
+        return 'Triángulo';
+      case 4:
+        return 'Cuadrado';
+      case 5:
+        return 'Pentágono';
+      case 6:
+        return 'Hexágono';
+      case 7:
+        return 'Heptágono';
+      case 8:
+        return 'Octágono';
+      case 9:
+        return 'Nonágono';
+      case 10:
+        return 'Decágono';
+      default:
+        return 'Polígono';
+    }
+  }
+
+  bool _esPoligonoRegular() {
+    if (puntos.length < 4) return true; // Triángulos siempre son regulares
+
+    final distancias = <double>[];
+
+    for (int i = 0; i < puntos.length - 1; i++) {
+      final dx = puntos[i + 1].latitude - puntos[i].latitude;
+      final dy = puntos[i + 1].longitude - puntos[i].longitude;
+      distancias.add(sqrt(dx * dx + dy * dy));
+    }
+
+    // Verificar si todas las distancias son aproximadamente iguales
+    final primeraDistancia = distancias.first;
+    for (final distancia in distancias) {
+      if ((distancia - primeraDistancia).abs() > 0.01) {
+        return false;
+      }
+    }
+
+    return true;
   }
 
   @override
@@ -282,33 +382,40 @@ class _MapaPageState extends State<MapaPage> {
                               _dibujarPoligono();
                             }
                             final area = _calcularArea();
-                            await Supabase.instance.client
-                                .from('proyectos')
-                                .update({'area': area})
-                                .eq('id', widget.proyectoId);
-                            setState(() => finalizado = true);
-                            showDialog(
-                              context: context,
-                              builder: (_) => AlertDialog(
-                                title: const Text('Área del polígono'),
-                                content: Column(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    Text('Área: $area unidades²'),
-                                    const SizedBox(height: 12),
-                                    ElevatedButton.icon(
-                                      icon: const Icon(Icons.upload_file),
-                                      label: const Text('Subir imagen del polígono'),
-                                      onPressed: _subirImagenPoligono,
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            );
+                            final puntoMedio = _calcularPuntoMedio();
+                            final tipoFigura = _determinarTipoFigura();
+
+                            try {
+                              await Supabase.instance.client
+                                  .from('territories')
+                                  .update({
+                                    'area': area,
+                                    'latitude': puntoMedio.latitude,
+                                    'longitude': puntoMedio.longitude,
+                                    'polygon': tipoFigura,
+                                  })
+                                  .eq('id', widget.proyectoId);
+
+                              setState(() => finalizado = true);
+
+                              if (context.mounted) {
+                                Navigator.pushNamedAndRemoveUntil(context, '/home', (route) => false);
+                              }
+                            } catch (e) {
+                              print('Error al finalizar el territorio: $e');
+                            }
                           }
                         : null,
                     icon: const Icon(Icons.check_circle),
                     label: const Text('Finalizar'),
+                  ),
+                ),
+                Positioned(
+                  top: 20,
+                  right: 20,
+                  child: ElevatedButton(
+                    onPressed: _calcularPuntoMedio,
+                    child: const Text('Calcular Punto Medio'),
                   ),
                 ),
               ],

@@ -144,9 +144,11 @@ class _MapaPageState extends State<MapaPage> {
       bottom: 20,
       right: 20,
       child: ElevatedButton.icon(
-        onPressed: (puntos.length > 2 &&
+        onPressed:
+            (puntos.length > 2 &&
                 !finalizado &&
-                userIdActual == creadorId) // Verifica si el usuario es el creador
+                userIdActual ==
+                    creadorId) // Verifica si el usuario es el creador
             ? () async {
                 if (puntos.isNotEmpty && puntos.first != puntos.last) {
                   setState(() {
@@ -316,7 +318,11 @@ class _MapaPageState extends State<MapaPage> {
     }
 
     _poligonos.clear();
-    if (puntos.length > 2 && puntos.first == puntos.last) {
+    if (puntos.length > 2) {
+      if (puntos.first != puntos.last) {
+        puntos.add(puntos.first);
+      }
+
       final nuevoPoligono = Polygon(
         polygonId: const PolygonId('poligono1'),
         points: puntos,
@@ -364,12 +370,16 @@ class _MapaPageState extends State<MapaPage> {
     if (poly.first != poly.last) {
       poly.add(poly.first);
     }
-    double area = 0.0;
+    double total = 0.0;
+    final earthRadius = 6378137.0; // Radio de la Tierra en metros
     for (int i = 0; i < poly.length - 1; i++) {
-      area += poly[i].latitude * poly[i + 1].longitude;
-      area -= poly[i + 1].latitude * poly[i].longitude;
+      final p1 = poly[i];
+      final p2 = poly[i + 1];
+      total +=
+          (p2.longitude * pi / 180 - p1.longitude * pi / 180) *
+          (2 + sin(p1.latitude * pi / 180) + sin(p2.latitude * pi / 180));
     }
-    return (area / 2).abs();
+    return (total * earthRadius * earthRadius / 2).abs();
   }
 
   LatLng _calcularPuntoMedio() {
@@ -484,9 +494,15 @@ class _MapaPageState extends State<MapaPage> {
                       child: Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
-                          const Text(
-                            'Coordenadas',
-                            style: TextStyle(fontWeight: FontWeight.bold),
+                          Expanded(
+                            child: Text(
+                              'Coordenadas',
+                              style: const TextStyle(
+                                fontWeight: FontWeight.bold,
+                              ),
+                              overflow: TextOverflow
+                                  .ellipsis, 
+                            ),
                           ),
                           IconButton(
                             onPressed: () {
@@ -604,22 +620,23 @@ class _MapaPageState extends State<MapaPage> {
                     ),
                     child: cargandoImagen
                         ? const Center(
-                            child: CircularProgressIndicator(), // Indicador de carga
+                            child:
+                                CircularProgressIndicator(), // Indicador de carga
                           )
                         : (_imageBytes != null
-                            ? ClipRRect(
-                                borderRadius: BorderRadius.circular(8),
-                                child: Image.memory(
-                                  _imageBytes!,
-                                  fit: BoxFit.cover,
-                                ),
-                              )
-                            : const Center(
-                                child: Text(
-                                  'No se ha seleccionado ninguna imagen',
-                                  style: TextStyle(color: Colors.grey),
-                                ),
-                              )),
+                              ? ClipRRect(
+                                  borderRadius: BorderRadius.circular(8),
+                                  child: Image.memory(
+                                    _imageBytes!,
+                                    fit: BoxFit.cover,
+                                  ),
+                                )
+                              : const Center(
+                                  child: Text(
+                                    'No se ha seleccionado ninguna imagen',
+                                    style: TextStyle(color: Colors.grey),
+                                  ),
+                                )),
                   ),
                   const SizedBox(height: 10),
                   ElevatedButton(

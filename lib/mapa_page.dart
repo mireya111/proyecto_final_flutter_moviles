@@ -500,8 +500,7 @@ class _MapaPageState extends State<MapaPage> {
                               style: const TextStyle(
                                 fontWeight: FontWeight.bold,
                               ),
-                              overflow: TextOverflow
-                                  .ellipsis, 
+                              overflow: TextOverflow.ellipsis,
                             ),
                           ),
                           IconButton(
@@ -692,25 +691,33 @@ class _MapaPageState extends State<MapaPage> {
   }
 
   Future<void> _marcarUbicacionActual() async {
-    if (ubicacionActual == null || finalizado) return;
+    if (finalizado) return;
 
     try {
+      // Obtén la ubicación actual en tiempo real
+      final Position pos = await Geolocator.getCurrentPosition();
+
+      // Actualiza la ubicación actual
+      final nuevaUbicacion = LatLng(pos.latitude, pos.longitude);
+
       // Inserta la ubicación actual en la base de datos
       await Supabase.instance.client.from('puntos').insert({
         'usuario': userIdActual,
-        'latitud': ubicacionActual!.latitude,
-        'longitud': ubicacionActual!.longitude,
+        'latitud': nuevaUbicacion.latitude,
+        'longitud': nuevaUbicacion.longitude,
         'timestamp': DateTime.now().toIso8601String(),
         'proyecto_id': widget.proyectoId,
       });
 
       // Agrega el nuevo punto a la lista de puntos
       setState(() {
-        puntos.add(ubicacionActual!);
+        puntos.add(nuevaUbicacion);
       });
+
+      // Redibuja el polígono
       _dibujarPoligono();
 
-      // Recarga los puntos colaborativos y actualiza el polígono
+      // Recarga los puntos colaborativos
       await _cargarPuntosColaborativos();
     } catch (e) {
       print('Error al insertar punto: $e');

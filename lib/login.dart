@@ -42,11 +42,29 @@ class _LoginPageState extends State<LoginPage> {
         userIdActual = userId;
         userEmailActual = userEmail;
 
-        // Actualizar status en locations
-        await Supabase.instance.client
+        // Verificar si el usuario ya tiene registro en locations
+        final location = await Supabase.instance.client
             .from('locations')
-            .update({'status': true})
-            .eq('id_user', userId);
+            .select('id')
+            .eq('id_user', userId)
+            .maybeSingle();
+
+        if (location == null) {
+          // Si no existe, lo crea con status true y campos requeridos
+          await Supabase.instance.client.from('locations').insert({
+            'id_user': userId,
+            'status': true,
+            'timestamp': DateTime.now().toIso8601String(),
+            'latitude': 0.0,
+            'longitude': 0.0,
+          });
+        } else {
+          // Si existe, solo actualiza el status
+          await Supabase.instance.client
+              .from('locations')
+              .update({'status': true})
+              .eq('id_user', userId);
+        }
 
         // Redirigir al home
         if (mounted) {

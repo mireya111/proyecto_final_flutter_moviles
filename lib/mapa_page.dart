@@ -339,28 +339,22 @@ class _MapaPageState extends State<MapaPage> {
         distanceFilter: 5,
       ),
     ).listen((Position pos) async {
-      ubicacionActual = LatLng(pos.latitude, pos.longitude);
+      setState(() {
+        ubicacionActual = LatLng(pos.latitude, pos.longitude);
+      });
       if (userIdActual != null) {
         try {
-          final loc = await Supabase.instance.client
-              .from('locations')
-              .select('status')
-              .eq('id_user', userIdActual!)
-              .maybeSingle();
-          if (loc != null && loc['status'] == true) {
-            await Supabase.instance.client.from('locations').upsert({
-              'id_user': userIdActual,
-              'latitude': pos.latitude,
-              'longitude': pos.longitude,
-              'timestamp': DateTime.now().toIso8601String(),
-              'status': true,
-            }, onConflict: 'id_user');
-          }
+          await Supabase.instance.client.from('locations').upsert({
+            'id_user': userIdActual,
+            'latitude': pos.latitude,
+            'longitude': pos.longitude,
+            'timestamp': DateTime.now().toIso8601String(),
+            'status': true,
+          }, onConflict: 'id_user');
         } catch (e) {
           print('Error actualizando location: $e');
         }
       }
-      setState(() {});
     });
   }
 
@@ -693,9 +687,14 @@ class _MapaPageState extends State<MapaPage> {
         'proyecto_id': widget.proyectoId,
       });
 
+      // Agrega el nuevo punto a la lista de puntos
+      setState(() {
+        puntos.add(ubicacionActual!);
+      });
+      _dibujarPoligono();
+
       // Recarga los puntos colaborativos y actualiza el polígono
       await _cargarPuntosColaborativos();
-      _dibujarPoligono();
     } catch (e) {
       print('Error al insertar punto: $e');
     }

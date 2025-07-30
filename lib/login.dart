@@ -42,11 +42,29 @@ class _LoginPageState extends State<LoginPage> {
         userIdActual = userId;
         userEmailActual = userEmail;
 
-        // Actualizar status en locations
-        await Supabase.instance.client
+        // Verificar si el usuario ya tiene registro en locations
+        final location = await Supabase.instance.client
             .from('locations')
-            .update({'status': true})
-            .eq('id_user', userId);
+            .select('id')
+            .eq('id_user', userId)
+            .maybeSingle();
+
+        if (location == null) {
+          // Si no existe, lo crea con status true y campos requeridos
+          await Supabase.instance.client.from('locations').insert({
+            'id_user': userId,
+            'status': true,
+            'timestamp': DateTime.now().toIso8601String(),
+            'latitude': 0.0,
+            'longitude': 0.0,
+          });
+        } else {
+          // Si existe, solo actualiza el status
+          await Supabase.instance.client
+              .from('locations')
+              .update({'status': true})
+              .eq('id_user', userId);
+        }
 
         // Redirigir al home
         if (mounted) {
@@ -119,24 +137,6 @@ class _LoginPageState extends State<LoginPage> {
                 child: _loading
                     ? const CircularProgressIndicator()
                     : const Text('Iniciar sesión'),
-              ),
-              const SizedBox(height: 10),
-              TextButton(
-                onPressed: () async {
-                  final result =
-                      await Navigator.pushNamed(context, '/registro');
-                  if (result == true && mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(
-                        content:
-                            Text('¡Registro exitoso! Ahora puedes iniciar sesión.'),
-                        backgroundColor: Colors.green,
-                        duration: Duration(seconds: 3),
-                      ),
-                    );
-                  }
-                },
-                child: const Text('¿No tienes cuenta? Regístrate aquí'),
               ),
             ],
           ),

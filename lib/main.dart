@@ -1,12 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-
 import 'login.dart';
-import 'registro.dart';
 import 'home_page.dart';
 import 'crear_proyecto_page.dart';
 import 'mapa_page.dart';
-import 'ver_proyecto_page.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -30,7 +27,6 @@ class MyApp extends StatelessWidget {
       initialRoute: '/login',
       routes: {
         '/login': (context) => const LoginPage(),
-        '/registro': (context) => const RegisterPage(),
         '/home': (context) => const HomePage(),
         '/crear': (context) => const CrearProyectoPage(),
       },
@@ -42,12 +38,6 @@ class MyApp extends StatelessWidget {
               proyectoId: args['proyectoId'],
               colaborativo: args['colaborativo'],
             ),
-          );
-        }
-        if (settings.name == '/ver') {
-          final args = settings.arguments as Map<String, dynamic>;
-          return MaterialPageRoute(
-            builder: (_) => VerProyectoPage(proyecto: args['proyecto']),
           );
         }
         return null;

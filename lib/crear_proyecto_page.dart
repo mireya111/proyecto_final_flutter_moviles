@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'mapa_page.dart';
+import 'package:geolocator/geolocator.dart';
 import 'sesion.dart';
 
 class CrearProyectoPage extends StatefulWidget {
@@ -18,6 +19,35 @@ class _CrearProyectoPageState extends State<CrearProyectoPage> {
   List<dynamic> usuariosActivos = [];
   List<dynamic> seleccionados = [];
 
+  void _iniciarActualizacionUbicacion() {
+    Geolocator.getPositionStream(
+      locationSettings: const LocationSettings(
+        accuracy: LocationAccuracy.high,
+        distanceFilter: 10, // Actualizar cada 10 metros
+      ),
+    ).listen((Position pos) async {
+      if (userIdActual != null) {
+        try {
+          await Supabase.instance.client.from('locations').upsert({
+            'id_user': userIdActual,
+            'latitude': pos.latitude,
+            'longitude': pos.longitude,
+            'timestamp': DateTime.now().toIso8601String(),
+            'status': true,
+          }, onConflict: 'id_user');
+        } catch (e) {
+          print('Error actualizando ubicación: $e');
+        }
+      }
+    });
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    _iniciarActualizacionUbicacion();
+  }
+
   Future<void> _cargarUsuariosActivos() async {
     // Traer usuarios activos con join para obtener el username
     final usuarios = await Supabase.instance.client
@@ -27,7 +57,9 @@ class _CrearProyectoPageState extends State<CrearProyectoPage> {
     setState(() {
       usuariosActivos = usuarios;
       // Eliminar seleccionados que ya no están activos
-      seleccionados = seleccionados.where((s) => usuarios.any((u) => u['id_user'] == s)).toList();
+      seleccionados = seleccionados
+          .where((s) => usuarios.any((u) => u['id_user'] == s))
+          .toList();
     });
   }
 
@@ -41,33 +73,61 @@ class _CrearProyectoPageState extends State<CrearProyectoPage> {
         if (!participantes.contains(userIdActual)) {
           participantes.add(userIdActual);
         }
+      } else {
+        // Si no es colaborativo, solo el usuario logueado participa
+        participantes = [userIdActual];
       }
-      final response = await Supabase.instance.client.from('proyectos').insert({
-        'nombre': nombreCtrl.text,
-        'descripcion': descripcionCtrl.text,
-        'colaborativo': colaborativo,
-        'creador': userIdActual,
-        'participantes': participantes,
-      }).select().single();
 
-      final idProyecto = response['id'];
-      if (!mounted) return;
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(
-          builder: (_) => MapaPage(
-            proyectoId: idProyecto,
-            colaborativo: colaborativo,
+      try {
+        final response = await Supabase.instance.client
+            .from('territories')
+            .insert({
+              'nombre': nombreCtrl.text,
+              'propieties': descripcionCtrl.text,
+              'colaborativo': colaborativo,
+              'creador': userIdActual,
+              'participantes': participantes,
+            })
+            .select()
+            .single();
+
+        final idProyecto = response['id'];
+        if (!mounted) return;
+
+        // Abrir mapa para los usuarios seleccionados (solo en colaborativo)
+        if (colaborativo) {
+          for (var userId in seleccionados) {
+            if (userId != userIdActual) {
+              // Aquí podrías implementar una lógica para enviar notificaciones o abrir el mapa automáticamente
+              print('Abrir mapa para usuario: $userId');
+            }
+          }
+        }
+
+        // Navegar al mapa para el creador del territorio
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(
+            builder: (_) =>
+                MapaPage(proyectoId: idProyecto, colaborativo: colaborativo),
           ),
-        ),
-      );
+        );
+      } catch (e) {
+        // Manejo de errores
+        print('Error al crear el territorio: $e');
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Error al crear el territorio')),
+          );
+        }
+      }
     }
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Crear Proyecto')),
+      appBar: AppBar(title: const Text('Crear Territorio')),
       body: Padding(
         padding: const EdgeInsets.all(16.0),
         child: Form(
@@ -76,12 +136,14 @@ class _CrearProyectoPageState extends State<CrearProyectoPage> {
             children: [
               TextFormField(
                 controller: nombreCtrl,
-                decoration: const InputDecoration(labelText: 'Nombre del proyecto'),
+                decoration: const InputDecoration(
+                  labelText: 'Nombre del territorio',
+                ),
                 validator: (value) => value!.isEmpty ? 'Requerido' : null,
               ),
               TextFormField(
                 controller: descripcionCtrl,
-                decoration: const InputDecoration(labelText: 'Descripción'),
+                decoration: const InputDecoration(labelText: 'Propiedades'),
               ),
               SwitchListTile(
                 title: const Text('¿Colaborativo?'),
@@ -94,7 +156,9 @@ class _CrearProyectoPageState extends State<CrearProyectoPage> {
                       seleccionados = [];
                     });
                   } else {
-                    setState(() { colaborativo = true; });
+                    setState(() {
+                      colaborativo = true;
+                    });
                     await _cargarUsuariosActivos();
                   }
                 },
@@ -107,13 +171,19 @@ class _CrearProyectoPageState extends State<CrearProyectoPage> {
                     if (usuariosActivos.isEmpty)
                       const Padding(
                         padding: EdgeInsets.symmetric(vertical: 8.0),
-                        child: Text('No hay usuarios para colaborar', style: TextStyle(color: Colors.grey)),
+                        child: Text(
+                          'No hay usuarios para colaborar',
+                          style: TextStyle(color: Colors.grey),
+                        ),
                       )
-                    else ...usuariosActivos.map((u) => CheckboxListTile(
+                    else
+                      ...usuariosActivos.map(
+                        (u) => CheckboxListTile(
                           title: Text(
-                            (u['users'] != null && u['users']['username'] != null)
-                              ? u['users']['username']
-                              : u['id_user'].toString()
+                            (u['users'] != null &&
+                                    u['users']['username'] != null)
+                                ? u['users']['username']
+                                : u['id_user'].toString(),
                           ),
                           value: seleccionados.contains(u['id_user']),
                           onChanged: (checked) {
@@ -127,7 +197,8 @@ class _CrearProyectoPageState extends State<CrearProyectoPage> {
                               }
                             });
                           },
-                        )),
+                        ),
+                      ),
                   ],
                 ),
               const SizedBox(height: 20),

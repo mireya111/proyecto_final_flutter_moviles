@@ -10,8 +10,10 @@ import 'usuarios_mapa.dart';
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  await dotenv.load();
+  // Carga el archivo .env
+  await dotenv.load(fileName: "assets/.env");
 
+  // Inicializa Supabase con las credenciales del archivo .env
   await Supabase.initialize(
     url: dotenv.env['SUPABASE_URL']!,
     anonKey: dotenv.env['SUPABASE_ANON_KEY']!,

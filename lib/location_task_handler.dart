@@ -45,7 +45,8 @@ class LocationTaskHandler extends TaskHandler {
   @override
   Future<void> onDestroy(DateTime timestamp, bool isRepeatEvent) async {
     _isTracking = false;
-    await _location.changeSettings(interval: 0); // Detener actualizaciones
+    await _location.changeSettings(interval: 0);
+    await _location.enableBackgroundMode(enable: false);
   }
 
   @override

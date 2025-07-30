@@ -84,26 +84,42 @@ class HomePage extends StatelessWidget {
             IconButton(
               icon: const Icon(Icons.logout),
               onPressed: () async {
-                if (userIdActual != null) {
-                  try {
+                try {
+                  // 1. Detener primero el servicio en segundo plano
+                  await FlutterForegroundTask.stopService();
+                  print('Servicio en segundo plano detenido');
+
+                  // 2. Actualizar el estado en la tabla locations
+                  if (userIdActual != null) {
                     await Supabase.instance.client
                         .from('locations')
                         .update({'status': false})
                         .eq('id_user', userIdActual!);
-                  } catch (e) {
-                    print(
-                      'Error al actualizar el estado en la tabla locations: $e',
+                    print('Estado actualizado en la tabla locations');
+                  }
+                  // 3. Cerrar sesión en Supabase
+                  await Supabase.instance.client.auth.signOut();
+                  print('Sesión cerrada en Supabase');
+
+                  // 4. Limpiar variables de sesión (si existen)
+                  userIdActual = null;
+                  userEmailActual = null;
+
+                  // 5. Navegar a la pantalla de inicio de sesión
+                  if (context.mounted) {
+                    Navigator.pushReplacementNamed(context, '/login');
+                  }
+                } catch (e) {                
+                  // Mostrar mensaje de error al usuario si es necesario
+                  if (context.mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text(
+                          'Error al cerrar sesión. Intente nuevamente.',
+                        ),
+                      ),
                     );
                   }
-                }
-                try{
-                await FlutterForegroundTask.stopService();
-                } catch (e) {
-                  print('Error al detener el servicio en segundo plano: $e');
-                }
-                await Supabase.instance.client.auth.signOut();
-                if (context.mounted) {
-                  Navigator.pushReplacementNamed(context, '/login');
                 }
               },
             ),

@@ -154,7 +154,6 @@ class _LoginPageState extends State<LoginPage> {
         });
       }
     } catch (e) {
-      print('Error al iniciar sesión: $e');
       setState(() {
         _error = 'Error al iniciar sesión';
       });
@@ -212,8 +211,8 @@ class _LoginPageState extends State<LoginPage> {
                       suffixIcon: IconButton(
                         icon: Icon(
                           _obscurePassword
-                              ? Icons.visibility_off
-                              : Icons.visibility,
+                              ? Icons.visibility
+                              : Icons.visibility_off,
                         ),
                         onPressed: () {
                           setState(() {

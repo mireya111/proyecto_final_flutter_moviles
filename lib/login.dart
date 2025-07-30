@@ -55,10 +55,20 @@ class _LoginPageState extends State<LoginPage> {
   Future<void> _openBatterySettings() async {
     final androidInfo = await DeviceInfoPlugin().androidInfo;
     if (androidInfo.version.sdkInt >= 23) {
+      // Verificar si la optimización de batería está deshabilitada
       const intent = AndroidIntent(
+        action: 'android.settings.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS',
+      );
+      final result = await intent.canResolveActivity();
+      if (result == null || !result) {
+        return;
+      }
+
+      // Abrir la configuración de batería si es necesario
+      const openSettingsIntent = AndroidIntent(
         action: 'android.settings.IGNORE_BATTERY_OPTIMIZATION_SETTINGS',
       );
-      await intent.launch();
+      await openSettingsIntent.launch();
     }
   }
 
@@ -133,13 +143,8 @@ class _LoginPageState extends State<LoginPage> {
       if (userId != null) {
         userIdActual = userId;
         userEmailActual = userEmail;
-
-        // Iniciar el rastreo de ubicación
         await _startLocationTracking();
-
-        // Mostrar configuración de batería
         await _openBatterySettings();
-
         if (mounted) {
           Navigator.pushReplacementNamed(context, '/home');
         }

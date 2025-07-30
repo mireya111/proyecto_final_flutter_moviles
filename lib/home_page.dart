@@ -179,14 +179,14 @@ class HomePage extends StatelessWidget {
             Text(
               'Fecha creación: ${_formatearFecha(territorio['created_at'])}',
             ),
-            if (territorio['imagen_polig'] != null &&
-                (territorio['imagen_polig'] as String).isNotEmpty)
+            if (territorio['imagen_poligono'] != null &&
+                (territorio['imagen_poligono'] as String).isNotEmpty)
               Padding(
                 padding: const EdgeInsets.only(top: 8.0),
                 child: ClipRRect(
                   borderRadius: BorderRadius.circular(8),
                   child: Image.network(
-                    territorio['imagen_polig'],
+                    territorio['imagen_poligono'],
                     height: 120,
                     width: double.infinity,
                     fit: BoxFit.cover,
@@ -248,14 +248,14 @@ class HomePage extends StatelessWidget {
                     Text(
                       'Fecha creación: ${_formatearFecha(territorio['created_at'])}',
                     ),
-                    if (territorio['imagen_polig'] != null &&
-                        (territorio['imagen_polig'] as String).isNotEmpty)
+                    if (territorio['imagen_poligono'] != null &&
+                        (territorio['imagen_poligono'] as String).isNotEmpty)
                       Padding(
                         padding: const EdgeInsets.only(top: 8.0),
                         child: ClipRRect(
                           borderRadius: BorderRadius.circular(8),
                           child: Image.network(
-                            territorio['imagen_polig'],
+                            territorio['imagen_poligono'],
                             height: 120,
                             width: double.infinity,
                             fit: BoxFit.cover,

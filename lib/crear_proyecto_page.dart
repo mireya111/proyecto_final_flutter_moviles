@@ -54,11 +54,16 @@ class _CrearProyectoPageState extends State<CrearProyectoPage> {
         .from('locations')
         .select('id_user, users(username)')
         .eq('status', true);
+
     setState(() {
-      usuariosActivos = usuarios;
+      // Filtrar para excluir al usuario actual
+      usuariosActivos = usuarios
+          .where((u) => u['id_user'] != userIdActual)
+          .toList();
+
       // Eliminar seleccionados que ya no están activos
       seleccionados = seleccionados
-          .where((s) => usuarios.any((u) => u['id_user'] == s))
+          .where((s) => usuariosActivos.any((u) => u['id_user'] == s))
           .toList();
     });
   }

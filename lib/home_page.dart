@@ -5,7 +5,6 @@ import 'package:flutter_foreground_task/flutter_foreground_task.dart';
 import 'crear_proyecto_page.dart';
 import 'mapa_page.dart';
 import 'sesion.dart';
-import 'usuarios_mapa.dart';
 
 class HomePage extends StatelessWidget {
   const HomePage({super.key});
@@ -26,7 +25,7 @@ class HomePage extends StatelessWidget {
         .select()
         .contains('participantes', [userIdActual])
         .neq('creador', userIdActual!)
-        .neq('finalizado', true) // Excluir proyectos finalizados
+        .neq('finalizado', true)
         .order('created_at', ascending: false);
   }
 
@@ -62,7 +61,7 @@ class HomePage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return DefaultTabController(
-      length: 3, // Número de pestañas
+      length: 2,
       child: Scaffold(
         appBar: AppBar(
           title: const Text('Territorios Topográficos'),
@@ -70,14 +69,12 @@ class HomePage extends StatelessWidget {
             tabs: [
               Tab(text: 'Mis proyectos'),
               Tab(text: 'Invitaciones'),
-              Tab(text: 'Usuarios en mapa'),
             ],
           ),
           actions: [
             IconButton(
-              icon: const Icon(Icons.refresh), // Botón de recargar
+              icon: const Icon(Icons.refresh),
               onPressed: () {
-                // Recargar la página
                 Navigator.pushReplacement(
                   context,
                   MaterialPageRoute(builder: (_) => const HomePage()),
@@ -88,18 +85,22 @@ class HomePage extends StatelessWidget {
               icon: const Icon(Icons.logout),
               onPressed: () async {
                 if (userIdActual != null) {
-                  // Actualizar el estado del usuario en la base de datos
-                  await Supabase.instance.client
-                      .from('locations')
-                      .update({'status': false})
-                      .eq('id_user', userIdActual!);
+                  try {
+                    await Supabase.instance.client
+                        .from('locations')
+                        .update({'status': false})
+                        .eq('id_user', userIdActual!);
+                  } catch (e) {
+                    print(
+                      'Error al actualizar el estado en la tabla locations: $e',
+                    );
+                  }
                 }
-                // Detener el servicio en segundo plano
                 await FlutterForegroundTask.stopService();
-                // Cerrar sesión en Supabase
                 await Supabase.instance.client.auth.signOut();
-                // Navegar a la pantalla de inicio de sesión
-                Navigator.pushReplacementNamed(context, '/login');
+                if (context.mounted) {
+                  Navigator.pushReplacementNamed(context, '/login');
+                }
               },
             ),
           ],
@@ -110,16 +111,36 @@ class HomePage extends StatelessWidget {
             _buildMisProyectos(),
             // Página "Invitaciones"
             _buildInvitaciones(),
-            // Página "Usuarios en mapa"
-            _buildUsuariosMapaTab(context), 
           ],
         ),
-        floatingActionButton: FloatingActionButton(
-          onPressed: () => Navigator.push(
-            context,
-            MaterialPageRoute(builder: (_) => const CrearProyectoPage()),
-          ),
-          child: const Icon(Icons.add),
+        floatingActionButton: Column(
+          mainAxisSize: MainAxisSize.min,
+          mainAxisAlignment: MainAxisAlignment.end,
+          children: [
+            FloatingActionButton(
+              heroTag: 'usuariosMapa',
+              onPressed: () async {
+                final usuarios = await _obtenerUbicacionesUsuarios();
+                if (context.mounted) {
+                  Navigator.pushNamed(
+                    context,
+                    '/usuarios_mapa',
+                    arguments: usuarios,
+                  );
+                }
+              },
+              child: const Icon(Icons.group),
+            ),
+            const SizedBox(height: 16),
+            FloatingActionButton(
+              heroTag: 'crearProyecto',
+              onPressed: () => Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const CrearProyectoPage()),
+              ),
+              child: const Icon(Icons.add),
+            ),
+          ],
         ),
       ),
     );
@@ -204,7 +225,9 @@ class HomePage extends StatelessWidget {
             Text(
               'Colaborativo: ${territorio['colaborativo'] == true ? 'Sí' : 'No'}',
             ),
-            Text('Área: ${territorio['area'] ?? 'No calculada'}'),
+            Text(
+              'Área: ${territorio['area'] != null ? '${(territorio['area'] as num).toStringAsFixed(2)} m²' : 'No calculada'}',
+            ),
             Text(
               'Fecha creación: ${_formatearFecha(territorio['created_at'])}',
             ),
@@ -273,7 +296,9 @@ class HomePage extends StatelessWidget {
                     Text(
                       'Colaborativo: ${territorio['colaborativo'] == true ? 'Sí' : 'No'}',
                     ),
-                    Text('Área: ${territorio['area'] ?? 'No calculada'}'),
+                    Text(
+                      'Área: ${territorio['area'] != null ? '${(territorio['area'] as num).toStringAsFixed(2)} m²' : 'No calculada'}',
+                    ),
                     Text(
                       'Fecha creación: ${_formatearFecha(territorio['created_at'])}',
                     ),
@@ -305,7 +330,8 @@ class HomePage extends StatelessWidget {
                         builder: (_) => MapaPage(
                           proyectoId: territorio['id'], // ID del proyecto
                           colaborativo:
-                              territorio['colaborativo'] ?? false, // Si es colaborativo
+                              territorio['colaborativo'] ??
+                              false, // Si es colaborativo
                         ),
                       ),
                     );
@@ -316,26 +342,6 @@ class HomePage extends StatelessWidget {
           },
         );
       },
-    );
-  }
-
-  // Pega aquí tu método:
-  Widget _buildUsuariosMapaTab(BuildContext context) {
-    return Center(
-      child: ElevatedButton.icon(
-        icon: const Icon(Icons.location_on),
-        label: const Text('Ver usuarios en mapa'),
-        onPressed: () async {
-          final usuarios = await _obtenerUbicacionesUsuarios();
-          if (context.mounted) {
-            Navigator.pushNamed(
-              context,
-              '/usuarios_mapa',
-              arguments: usuarios,
-            );
-          }
-        },
-      ),
     );
   }
 }

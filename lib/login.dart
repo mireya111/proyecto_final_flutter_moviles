@@ -168,59 +168,84 @@ class _LoginPageState extends State<LoginPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Login')),
+      appBar: AppBar(title: const Text('Inicio de Sesión'), centerTitle: true),
       body: Padding(
         padding: const EdgeInsets.all(16.0),
-        child: Form(
-          key: _formKey,
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              TextFormField(
-                controller: _emailController,
-                decoration: const InputDecoration(labelText: 'Email'),
-                validator: (value) =>
-                    value!.isEmpty ? 'Ingrese su email' : null,
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            // Ícono de topografía
+            const Icon(
+              Icons.terrain, // Ícono que simula la topografía
+              size: 100,
+              color: Colors.blue,
+            ),
+            const SizedBox(height: 20),
+            const Text(
+              'Territorios Topográficos',
+              style: TextStyle(
+                fontSize: 24,
+                fontWeight: FontWeight.bold,
+                color: Colors.blue,
               ),
-              TextFormField(
-                controller: _passwordController,
-                decoration: InputDecoration(
-                  labelText: 'Contraseña',
-                  suffixIcon: IconButton(
-                    icon: Icon(
-                      _obscurePassword
-                          ? Icons.visibility_off
-                          : Icons.visibility,
+            ),
+            const SizedBox(height: 40),
+            Form(
+              key: _formKey,
+              child: Column(
+                children: [
+                  TextFormField(
+                    controller: _emailController,
+                    decoration: const InputDecoration(
+                      labelText: 'Email',
+                      prefixIcon: Icon(Icons.email),
                     ),
-                    onPressed: () {
-                      setState(() {
-                        _obscurePassword = !_obscurePassword;
-                      });
-                    },
+                    validator: (value) =>
+                        value!.isEmpty ? 'Ingrese su email' : null,
                   ),
-                ),
-                obscureText: _obscurePassword,
-                validator: (value) =>
-                    value!.isEmpty ? 'Ingrese su contraseña' : null,
+                  const SizedBox(height: 20),
+                  TextFormField(
+                    controller: _passwordController,
+                    decoration: InputDecoration(
+                      labelText: 'Contraseña',
+                      prefixIcon: const Icon(Icons.lock),
+                      suffixIcon: IconButton(
+                        icon: Icon(
+                          _obscurePassword
+                              ? Icons.visibility_off
+                              : Icons.visibility,
+                        ),
+                        onPressed: () {
+                          setState(() {
+                            _obscurePassword = !_obscurePassword;
+                          });
+                        },
+                      ),
+                    ),
+                    obscureText: _obscurePassword,
+                    validator: (value) =>
+                        value!.isEmpty ? 'Ingrese su contraseña' : null,
+                  ),
+                  const SizedBox(height: 20),
+                  if (_error != null)
+                    Text(_error!, style: const TextStyle(color: Colors.red)),
+                  const SizedBox(height: 20),
+                  ElevatedButton(
+                    onPressed: _loading
+                        ? null
+                        : () {
+                            if (_formKey.currentState!.validate()) {
+                              _login();
+                            }
+                          },
+                    child: _loading
+                        ? const CircularProgressIndicator(color: Colors.white)
+                        : const Text('Iniciar sesión'),
+                  ),
+                ],
               ),
-              const SizedBox(height: 20),
-              if (_error != null)
-                Text(_error!, style: const TextStyle(color: Colors.red)),
-              ElevatedButton(
-                onPressed: _loading
-                    ? null
-                    : () {
-                        if (_formKey.currentState!.validate()) {
-                          _login();
-                        }
-                      },
-                child: _loading
-                    ? const CircularProgressIndicator()
-                    : const Text('Iniciar sesión'),
-              ),
-              const SizedBox(height: 20),
-            ],
-          ),
+            ),
+          ],
         ),
       ),
     );

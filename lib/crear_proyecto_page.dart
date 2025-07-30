@@ -132,26 +132,52 @@ class _CrearProyectoPageState extends State<CrearProyectoPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Crear Territorio')),
-      body: Padding(
+      appBar: AppBar(title: const Text('Crear Territorio'), centerTitle: true),
+      body: SingleChildScrollView(
         padding: const EdgeInsets.all(16.0),
         child: Form(
           key: _formKey,
           child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              const Text(
+                'Información del Territorio',
+                style: TextStyle(
+                  fontSize: 20,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.blue,
+                ),
+              ),
+              const SizedBox(height: 20),
               TextFormField(
                 controller: nombreCtrl,
-                decoration: const InputDecoration(
-                  labelText: 'Nombre del territorio',
+                decoration: InputDecoration(
+                  labelText: 'Nombre del Territorio',
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(8.0),
+                  ),
+                  prefixIcon: const Icon(Icons.map),
                 ),
-                validator: (value) => value!.isEmpty ? 'Requerido' : null,
+                validator: (value) =>
+                    value!.isEmpty ? 'El nombre es requerido' : null,
               ),
+              const SizedBox(height: 20),
               TextFormField(
                 controller: descripcionCtrl,
-                decoration: const InputDecoration(labelText: 'Propiedades'),
+                decoration: InputDecoration(
+                  labelText: 'Descripción',
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(8.0),
+                  ),
+                  prefixIcon: const Icon(Icons.description),
+                ),
               ),
+              const SizedBox(height: 20),
               SwitchListTile(
-                title: const Text('¿Colaborativo?'),
+                title: const Text(
+                  '¿Colaborativo?',
+                  style: TextStyle(fontSize: 16),
+                ),
                 value: colaborativo,
                 onChanged: (val) async {
                   if (!val) {
@@ -168,48 +194,63 @@ class _CrearProyectoPageState extends State<CrearProyectoPage> {
                   }
                 },
               ),
-              if (colaborativo)
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text('Selecciona usuarios activos:'),
-                    if (usuariosActivos.isEmpty)
-                      const Padding(
-                        padding: EdgeInsets.symmetric(vertical: 8.0),
-                        child: Text(
-                          'No hay usuarios para colaborar',
-                          style: TextStyle(color: Colors.grey),
-                        ),
-                      )
-                    else
-                      ...usuariosActivos.map(
-                        (u) => CheckboxListTile(
-                          title: Text(
-                            (u['users'] != null &&
-                                    u['users']['username'] != null)
-                                ? u['users']['username']
-                                : u['id_user'].toString(),
-                          ),
-                          value: seleccionados.contains(u['id_user']),
-                          onChanged: (checked) {
-                            setState(() {
-                              if (checked == true) {
-                                if (!seleccionados.contains(u['id_user'])) {
-                                  seleccionados.add(u['id_user']);
-                                }
-                              } else {
-                                seleccionados.remove(u['id_user']);
-                              }
-                            });
-                          },
-                        ),
-                      ),
-                  ],
+              if (colaborativo) ...[
+                const SizedBox(height: 10),
+                const Text(
+                  'Selecciona usuarios activos:',
+                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
                 ),
-              const SizedBox(height: 20),
-              ElevatedButton(
-                onPressed: _crearProyecto,
-                child: const Text('Crear y abrir mapa'),
+                const SizedBox(height: 10),
+                if (usuariosActivos.isEmpty)
+                  const Text(
+                    'No hay usuarios activos disponibles.',
+                    style: TextStyle(color: Colors.grey),
+                  )
+                else
+                  Column(
+                    children: usuariosActivos
+                        .map(
+                          (u) => CheckboxListTile(
+                            title: Text(
+                              (u['users'] != null &&
+                                      u['users']['username'] != null)
+                                  ? u['users']['username']
+                                  : u['id_user'].toString(),
+                            ),
+                            value: seleccionados.contains(u['id_user']),
+                            onChanged: (checked) {
+                              setState(() {
+                                if (checked == true) {
+                                  if (!seleccionados.contains(u['id_user'])) {
+                                    seleccionados.add(u['id_user']);
+                                  }
+                                } else {
+                                  seleccionados.remove(u['id_user']);
+                                }
+                              });
+                            },
+                          ),
+                        )
+                        .toList(),
+                  ),
+              ],
+              const SizedBox(height: 30),
+              Center(
+                child: ElevatedButton.icon(
+                  onPressed: _crearProyecto,
+                  icon: const Icon(Icons.add),
+                  label: const Text('Crear y Abrir Mapa'),
+                  style: ElevatedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 24.0,
+                      vertical: 12.0,
+                    ),
+                    textStyle: const TextStyle(fontSize: 16),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(8.0),
+                    ),
+                  ),
+                ),
               ),
             ],
           ),

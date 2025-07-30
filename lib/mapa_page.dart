@@ -4,8 +4,6 @@ import 'package:flutter/material.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:geolocator/geolocator.dart';
-import 'package:image_picker/image_picker.dart';
-import 'package:image/image.dart' as img;
 import 'sesion.dart';
 
 class MapaPage extends StatefulWidget {
@@ -34,9 +32,6 @@ class _MapaPageState extends State<MapaPage> {
   bool cargandoUbicacion = false;
   bool finalizado = false;
   String? creadorId;
-
-  Uint8List? _imageBytes;
-  String? _imageName;
 
   @override
   void initState() {
@@ -71,153 +66,11 @@ class _MapaPageState extends State<MapaPage> {
     }
   }
 
-  Future<Uint8List> _resizeImage(Uint8List imageBytes) async {
-    final image = img.decodeImage(imageBytes);
-    if (image == null) throw Exception('No se pudo procesar la imagen');
-
-    final resized = img.copyResize(image, width: 1080, height: 1350);
-    return Uint8List.fromList(img.encodeJpg(resized, quality: 85));
-  }
-
-  Future<void> _pickImageFromGallery(StateSetter setStateDialog) async {
-    final picker = ImagePicker();
-    final result = await picker.pickImage(source: ImageSource.gallery);
-
-    if (result != null) {
-      final bytes = await result.readAsBytes();
-      final resizedBytes = await _resizeImage(bytes);
-
-      setState(() {
-        _imageBytes = resizedBytes;
-        _imageName = result.name;
-      });
-
-      setStateDialog(() {}); // Así se usa correctamente un StateSetter
-    }
-  }
-
-  Future<void> _pickImageFromCamera(StateSetter setStateDialog) async {
-    final picker = ImagePicker();
-    final result = await picker.pickImage(source: ImageSource.camera);
-
-    if (result != null) {
-      final bytes = await result.readAsBytes();
-      final resizedBytes = await _resizeImage(bytes);
-
-      setState(() {
-        _imageBytes = resizedBytes;
-        _imageName = 'camera_${DateTime.now().millisecondsSinceEpoch}.jpg';
-      });
-
-      setStateDialog(() {});
-    }
-  }
-
-  Future<String?> _uploadImage() async {
-    if (_imageBytes == null || _imageName == null) return null;
-
-    try {
-      final fileName =
-          'poligono_${widget.proyectoId}_${DateTime.now().millisecondsSinceEpoch}_$_imageName';
-      await Supabase.instance.client.storage
-          .from('uploads')
-          .uploadBinary(fileName, _imageBytes!);
-
-      final imageUrl = Supabase.instance.client.storage
-          .from('uploads')
-          .getPublicUrl(fileName);
-      return imageUrl;
-    } catch (e) {
-      throw Exception('Error al subir imagen: $e');
-    }
-  }
-
   @override
   void dispose() {
     // Libera el controlador del mapa
     mapController?.dispose();
     super.dispose();
-  }
-
-  Positioned _buildFinalizarButton() {
-    return Positioned(
-      bottom: 20,
-      right: 20,
-      child: ElevatedButton.icon(
-        onPressed:
-            (puntos.length > 2 &&
-                !finalizado &&
-                userIdActual ==
-                    creadorId) // Verifica si el usuario es el creador
-            ? () async {
-                if (puntos.isNotEmpty && puntos.first != puntos.last) {
-                  setState(() {
-                    puntos.add(puntos.first);
-                  });
-                  _dibujarPoligono();
-                }
-                final area = _calcularArea();
-                final puntoMedio = _calcularPuntoMedio();
-                final tipoFigura = _determinarTipoFigura();
-
-                try {
-                  await Supabase.instance.client
-                      .from('territories')
-                      .update({
-                        'area': area,
-                        'latitude': puntoMedio.latitude,
-                        'longitude': puntoMedio.longitude,
-                        'polygon': tipoFigura,
-                        'finalizado': true, // Marca el proyecto como finalizado
-                      })
-                      .eq('id', widget.proyectoId);
-
-                  setState(() => finalizado = true);
-
-                  if (context.mounted) {
-                    _mostrarModalFinalizar(context);
-                  }
-                } catch (e) {
-                  print('Error al finalizar el territorio: $e');
-                }
-              }
-            : null, // Deshabilita el botón si no cumple las condiciones
-        icon: const Icon(Icons.check_circle),
-        label: const Text('Finalizar Escaneo'),
-      ),
-    );
-  }
-
-  Future<void> _showImagePickerDialog(StateSetter setStateDialog) async {
-    showDialog(
-      context: context,
-      builder: (BuildContext context) {
-        return AlertDialog(
-          title: const Text('Seleccionar imagen'),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              ListTile(
-                leading: const Icon(Icons.photo_library),
-                title: const Text('Galería'),
-                onTap: () async {
-                  Navigator.pop(context);
-                  await _pickImageFromGallery(setStateDialog);
-                },
-              ),
-              ListTile(
-                leading: const Icon(Icons.camera_alt),
-                title: const Text('Cámara'),
-                onTap: () async {
-                  Navigator.pop(context);
-                  await _pickImageFromCamera(setStateDialog);
-                },
-              ),
-            ],
-          ),
-        );
-      },
-    );
   }
 
   void _iniciarActualizacionPoligonoColaborativo() {
@@ -319,13 +172,14 @@ class _MapaPageState extends State<MapaPage> {
 
     _poligonos.clear();
     if (puntos.length > 2) {
-      if (puntos.first != puntos.last) {
-        puntos.add(puntos.first);
+      final puntosPoligono = List<LatLng>.from(puntos);
+      if (puntosPoligono.first != puntosPoligono.last) {
+        puntosPoligono.add(puntosPoligono.first);
       }
 
       final nuevoPoligono = Polygon(
         polygonId: const PolygonId('poligono1'),
-        points: puntos,
+        points: puntosPoligono,
         fillColor: const Color.fromARGB(100, 33, 150, 243),
         strokeColor: Colors.blue,
         strokeWidth: 3,
@@ -479,116 +333,20 @@ class _MapaPageState extends State<MapaPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Mapa del Territorio')),
+      appBar: AppBar(
+        title: const Text('Mapa del Territorio'),
+        backgroundColor: Theme.of(context).appBarTheme.backgroundColor,
+      ),
       body: Row(
         children: [
-          if (mostrarBarraLateral)
-            Expanded(
-              flex: 1,
-              child: Container(
-                color: Colors.grey[100],
-                child: Column(
-                  children: [
-                    Padding(
-                      padding: const EdgeInsets.all(8.0),
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Expanded(
-                            child: Text(
-                              'Coordenadas',
-                              style: const TextStyle(
-                                fontWeight: FontWeight.bold,
-                              ),
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                          ),
-                          IconButton(
-                            onPressed: () {
-                              setState(() {
-                                mostrarBarraLateral = false;
-                              });
-                            },
-                            icon: const Icon(Icons.visibility_off),
-                            tooltip: 'Ocultar coordenadas',
-                          ),
-                        ],
-                      ),
-                    ),
-                    Expanded(
-                      child: puntos.isEmpty
-                          ? const Center(child: Text('No hay puntos todavía'))
-                          : ListView.builder(
-                              itemCount: puntos.length,
-                              itemBuilder: (context, index) {
-                                final p = puntos[index];
-                                return ListTile(
-                                  title: Text(
-                                    'Lat: ${p.latitude.toStringAsFixed(6)}',
-                                  ),
-                                  subtitle: Text(
-                                    'Lng: ${p.longitude.toStringAsFixed(6)}',
-                                  ),
-                                );
-                              },
-                            ),
-                    ),
-                    ElevatedButton(
-                      onPressed: () => _mostrarArea(),
-                      child: const Text('Mostrar Área'),
-                    ),
-                  ],
-                ),
-              ),
-            ),
+          if (mostrarBarraLateral) _buildBarraLateral(),
           Expanded(
             flex: mostrarBarraLateral ? 3 : 1,
             child: Stack(
               children: [
-                GoogleMap(
-                  onMapCreated: (controller) async {
-                    mapController = controller;
-                    await _cargarPuntosColaborativos();
-                    _dibujarPoligono();
-                  },
-                  initialCameraPosition: CameraPosition(
-                    target:
-                        ubicacionActual ?? const LatLng(-0.22985, -78.52495),
-                    zoom: 16,
-                  ),
-                  myLocationEnabled: true,
-                  myLocationButtonEnabled: true,
-                  polygons: _poligonos,
-                  markers: _marcadores,
-                  polylines: _polilineas,
-                  mapType: MapType.normal,
-                ),
-                if (!mostrarBarraLateral)
-                  Positioned(
-                    top: 20,
-                    left: 20,
-                    child: FloatingActionButton(
-                      mini: true,
-                      onPressed: () {
-                        setState(() {
-                          mostrarBarraLateral = true;
-                        });
-                      },
-                      child: const Icon(Icons.visibility),
-                      tooltip: 'Mostrar coordenadas',
-                    ),
-                  ),
-                Positioned(
-                  bottom: 80,
-                  left: 20,
-                  child: ElevatedButton.icon(
-                    onPressed: cargandoUbicacion || finalizado
-                        ? null
-                        : _marcarUbicacionActual,
-                    icon: const Icon(Icons.add_location),
-                    label: const Text('Marcar'),
-                  ),
-                ),
+                _buildGoogleMap(),
+                if (!mostrarBarraLateral) _buildMostrarCoordenadasButton(),
+                _buildMarcarUbicacionButton(),
                 _buildFinalizarButton(),
               ],
             ),
@@ -598,8 +356,167 @@ class _MapaPageState extends State<MapaPage> {
     );
   }
 
+  Widget _buildBarraLateral() {
+    return Expanded(
+      flex: 1,
+      child: Container(
+        color: Theme.of(context).scaffoldBackgroundColor,
+        child: Column(
+          children: [
+            _buildBarraLateralHeader(),
+            Expanded(
+              child: puntos.isEmpty
+                  ? const Center(child: Text('No hay puntos todavía'))
+                  : ListView.builder(
+                      itemCount: puntos.length,
+                      itemBuilder: (context, index) {
+                        final p = puntos[index];
+                        return ListTile(
+                          title: Text('Lat: ${p.latitude.toStringAsFixed(6)}'),
+                          subtitle: Text(
+                            'Lng: ${p.longitude.toStringAsFixed(6)}',
+                          ),
+                        );
+                      },
+                    ),
+            ),
+            ElevatedButton(
+              onPressed: () => _mostrarArea(),
+              child: const Text('Mostrar Área'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildBarraLateralHeader() {
+    return Padding(
+      padding: const EdgeInsets.all(8.0),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          const Expanded(
+            child: Text(
+              'Coordenadas',
+              style: TextStyle(fontWeight: FontWeight.bold),
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+          IconButton(
+            onPressed: () {
+              setState(() {
+                mostrarBarraLateral = false;
+              });
+            },
+            icon: const Icon(Icons.visibility_off),
+            tooltip: 'Ocultar coordenadas',
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildGoogleMap() {
+    return Stack(
+      children: [
+        GoogleMap(
+          onMapCreated: (controller) async {
+            mapController = controller;
+            await _cargarPuntosColaborativos();
+            _dibujarPoligono();
+          },
+          initialCameraPosition: CameraPosition(
+            target: ubicacionActual ?? const LatLng(-0.22985, -78.52495),
+            zoom: 16,
+          ),
+          myLocationEnabled: !finalizado,
+          myLocationButtonEnabled: !finalizado,
+          polygons: _poligonos,
+          markers: _marcadores,
+          polylines: _polilineas,
+          mapType: MapType.normal,
+        ),
+      ],
+    );
+  }
+
+  Widget _buildMostrarCoordenadasButton() {
+    return Positioned(
+      top: 20,
+      left: 20,
+      child: FloatingActionButton(
+        mini: true,
+        onPressed: () {
+          setState(() {
+            mostrarBarraLateral = true;
+          });
+        },
+        child: const Icon(Icons.visibility),
+        tooltip: 'Mostrar coordenadas',
+      ),
+    );
+  }
+
+  Widget _buildMarcarUbicacionButton() {
+    return Positioned(
+      bottom: 80,
+      left: 20,
+      child: ElevatedButton.icon(
+        onPressed: cargandoUbicacion || finalizado
+            ? null
+            : _marcarUbicacionActual,
+        icon: const Icon(Icons.add_location),
+        label: const Text('Marcar'),
+      ),
+    );
+  }
+
+  Positioned _buildFinalizarButton() {
+    return Positioned(
+      bottom: 20,
+      right: 20,
+      child: ElevatedButton.icon(
+        onPressed:
+            (puntos.length > 2 && !finalizado && userIdActual == creadorId)
+            ? () async {
+                if (puntos.isNotEmpty && puntos.first != puntos.last) {
+                  setState(() {
+                    puntos.add(puntos.first);
+                  });
+                  _dibujarPoligono();
+                }
+                final area = _calcularArea();
+                final puntoMedio = _calcularPuntoMedio();
+                final tipoFigura = _determinarTipoFigura();
+
+                try {
+                  await Supabase.instance.client
+                      .from('territories')
+                      .update({
+                        'area': area,
+                        'latitude': puntoMedio.latitude,
+                        'longitude': puntoMedio.longitude,
+                        'polygon': tipoFigura,
+                      })
+                      .eq('id', widget.proyectoId);
+
+                  if (context.mounted) {
+                    _mostrarModalFinalizar(context);
+                  }
+                } catch (e) {
+                  print('Error al finalizar el territorio: $e');
+                }
+              }
+            : null,
+        icon: const Icon(Icons.check_circle),
+        label: const Text('Finalizar Escaneo'),
+      ),
+    );
+  }
+
   void _mostrarModalFinalizar(BuildContext context) {
-    bool cargandoImagen = false; // Variable para controlar el estado de carga
+    bool cargandoImagen = false;
     showDialog(
       context: context,
       builder: (context) {
@@ -622,47 +539,76 @@ class _MapaPageState extends State<MapaPage> {
                             child:
                                 CircularProgressIndicator(), // Indicador de carga
                           )
-                        : (_imageBytes != null
-                              ? ClipRRect(
-                                  borderRadius: BorderRadius.circular(8),
-                                  child: Image.memory(
-                                    _imageBytes!,
-                                    fit: BoxFit.cover,
-                                  ),
-                                )
-                              : const Center(
-                                  child: Text(
-                                    'No se ha seleccionado ninguna imagen',
-                                    style: TextStyle(color: Colors.grey),
-                                  ),
-                                )),
-                  ),
-                  const SizedBox(height: 10),
-                  ElevatedButton(
-                    onPressed: () async {
-                      setStateDialog(() {
-                        cargandoImagen = true; // Activa el estado de carga
-                      });
-
-                      await _showImagePickerDialog(setStateDialog);
-
-                      setStateDialog(() {
-                        cargandoImagen = false; // Desactiva el estado de carga
-                      });
-                    },
-                    child: const Text('Seleccionar Imagen'),
+                        : const Center(
+                            child: Text(
+                              'Se generará una captura del mapa con las líneas y el área completa.',
+                              style: TextStyle(color: Colors.grey),
+                            ),
+                          ),
                   ),
                 ],
               ),
               actions: [
-                if (_imageBytes != null)
-                  ElevatedButton(
-                    onPressed: () async {
-                      final imageUrl = await _uploadImage();
-                      if (imageUrl != null) {
+                ElevatedButton(
+                  onPressed: () async {
+                    setStateDialog(() {
+                      cargandoImagen = true; // Activa el estado de carga
+                    });
+
+                    try {
+                      setState(() {
+                        finalizado = true;
+                      });
+                      _dibujarPoligono();
+                      // Guardar los marcadores originales
+                      final Set<Marker> marcadoresOriginales = Set.from(
+                        _marcadores,
+                      );
+
+                      // Ocultar los marcadores temporalmente
+                      setState(() {
+                        _marcadores.clear();
+                      });
+
+                      // Ajustar la cámara para incluir todos los puntos
+                      if (puntos.isNotEmpty) {
+                        final bounds = _calcularLimitesDePuntos(puntos);
+                        await mapController?.animateCamera(
+                          CameraUpdate.newLatLngBounds(
+                            bounds,
+                            20,
+                          ), // Margen de 50px
+                        );
+                      }
+
+                      // Capturar el mapa
+                      final Uint8List? captura = await mapController
+                          ?.takeSnapshot();
+
+                      // Restaurar los marcadores
+                      setState(() {
+                        _marcadores.addAll(marcadoresOriginales);
+                      });
+
+                      if (captura != null) {
+                        // Subir la captura al almacenamiento de Supabase
+                        final fileName =
+                            'captura_mapa_${widget.proyectoId}_${DateTime.now().millisecondsSinceEpoch}.png';
+                        await Supabase.instance.client.storage
+                            .from('uploads')
+                            .uploadBinary(fileName, captura);
+
+                        final imageUrl = Supabase.instance.client.storage
+                            .from('uploads')
+                            .getPublicUrl(fileName);
+
+                        // Actualizar el territorio con la URL de la imagen
                         await Supabase.instance.client
                             .from('territories')
-                            .update({'imagen_poligono': imageUrl})
+                            .update({
+                              'imagen_poligono': imageUrl,
+                              'finalizado': true,
+                            })
                             .eq('id', widget.proyectoId);
 
                         if (context.mounted) {
@@ -672,10 +618,28 @@ class _MapaPageState extends State<MapaPage> {
                             (route) => false,
                           );
                         }
+                      } else {
+                        throw Exception('No se pudo capturar el mapa');
                       }
-                    },
-                    child: const Text('Subir Imagen'),
-                  ),
+                    } catch (e) {
+                      print('Error al capturar o subir la imagen: $e');
+                      if (context.mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text(
+                              'Error al capturar o subir la imagen',
+                            ),
+                          ),
+                        );
+                      }
+                    } finally {
+                      setStateDialog(() {
+                        cargandoImagen = false; // Desactiva el estado de carga
+                      });
+                    }
+                  },
+                  child: const Text('Capturar y Subir'),
+                ),
                 ElevatedButton(
                   onPressed: () {
                     Navigator.of(context).pop();
@@ -690,6 +654,26 @@ class _MapaPageState extends State<MapaPage> {
     );
   }
 
+  // Método para calcular los límites de los puntos seleccionados
+  LatLngBounds _calcularLimitesDePuntos(List<LatLng> puntos) {
+    double minLat = puntos.first.latitude;
+    double maxLat = puntos.first.latitude;
+    double minLng = puntos.first.longitude;
+    double maxLng = puntos.first.longitude;
+
+    for (var punto in puntos) {
+      if (punto.latitude < minLat) minLat = punto.latitude;
+      if (punto.latitude > maxLat) maxLat = punto.latitude;
+      if (punto.longitude < minLng) minLng = punto.longitude;
+      if (punto.longitude > maxLng) maxLng = punto.longitude;
+    }
+
+    return LatLngBounds(
+      southwest: LatLng(minLat, minLng),
+      northeast: LatLng(maxLat, maxLng),
+    );
+  }
+
   Future<void> _marcarUbicacionActual() async {
     if (finalizado) return;
 
@@ -700,7 +684,13 @@ class _MapaPageState extends State<MapaPage> {
       // Actualiza la ubicación actual
       final nuevaUbicacion = LatLng(pos.latitude, pos.longitude);
 
-      // Inserta la ubicación actual en la base de datos
+      // Agrega el nuevo punto a la lista de puntos inmediatamente
+      setState(() {
+        puntos.add(nuevaUbicacion);
+        _dibujarPoligono(); // Redibuja el polígono con el nuevo punto
+      });
+
+      // Inserta la ubicación actual en la base de datos en segundo plano
       await Supabase.instance.client.from('puntos').insert({
         'usuario': userIdActual,
         'latitud': nuevaUbicacion.latitude,
@@ -708,19 +698,13 @@ class _MapaPageState extends State<MapaPage> {
         'timestamp': DateTime.now().toIso8601String(),
         'proyecto_id': widget.proyectoId,
       });
-
-      // Agrega el nuevo punto a la lista de puntos
-      setState(() {
-        puntos.add(nuevaUbicacion);
-      });
-
-      // Redibuja el polígono
-      _dibujarPoligono();
-
-      // Recarga los puntos colaborativos
-      await _cargarPuntosColaborativos();
     } catch (e) {
       print('Error al insertar punto: $e');
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Error al marcar la ubicación')),
+        );
+      }
     }
   }
 }

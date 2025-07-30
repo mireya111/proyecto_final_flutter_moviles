@@ -1,6 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-import 'sesion.dart'; // importa tu variable de sesión
+import 'package:location/location.dart';
+import 'package:permission_handler/permission_handler.dart';
+import 'package:flutter_foreground_task/flutter_foreground_task.dart';
+import 'package:device_info_plus/device_info_plus.dart';
+import 'package:android_intent_plus/android_intent.dart';
+import 'sesion.dart';
+import 'location_task_handler.dart';
 
 class LoginPage extends StatefulWidget {
   const LoginPage({super.key});
@@ -17,6 +23,93 @@ class _LoginPageState extends State<LoginPage> {
   String? _error;
   bool _obscurePassword = true;
 
+  Location location = Location();
+
+  @override
+  void initState() {
+    super.initState();
+    _initializeForegroundTask();
+  }
+
+  void _initializeForegroundTask() {
+    FlutterForegroundTask.init(
+      androidNotificationOptions: AndroidNotificationOptions(
+        channelId: 'location_channel',
+        channelName: 'Location Tracking',
+        channelDescription: 'Tracking your location in background',
+        onlyAlertOnce: true,
+      ),
+      iosNotificationOptions: const IOSNotificationOptions(
+        showNotification: true,
+        playSound: false,
+      ),
+      foregroundTaskOptions: ForegroundTaskOptions(
+        autoRunOnBoot: true,
+        allowWakeLock: true,
+        allowWifiLock: true,
+        eventAction: ForegroundTaskEventAction.repeat(5000),
+      ),
+    );
+  }
+
+  Future<void> _openBatterySettings() async {
+    final androidInfo = await DeviceInfoPlugin().androidInfo;
+    if (androidInfo.version.sdkInt >= 23) {
+      const intent = AndroidIntent(
+        action: 'android.settings.IGNORE_BATTERY_OPTIMIZATION_SETTINGS',
+      );
+      await intent.launch();
+    }
+  }
+
+  Future<void> _startLocationTracking() async {
+    // Solicitar permisos de ubicación
+    if (await Permission.location.request().isGranted) {
+      if (await Permission.locationAlways.request().isGranted) {
+        // Verificar si el servicio de ubicación está habilitado
+        bool serviceEnabled = await location.serviceEnabled();
+        if (!serviceEnabled) {
+          serviceEnabled = await location.requestService();
+          if (!serviceEnabled) return;
+        }
+
+        // Iniciar servicio en segundo plano
+        await FlutterForegroundTask.startService(
+          notificationTitle: 'Rastreo de ubicación activo',
+          notificationText: 'La aplicación está rastreando tu ubicación.',
+          callback: startCallback,
+        );
+
+        // Configurar actualizaciones de ubicación
+        location.changeSettings(
+          interval: 5000, // Cada 5 segundos
+          distanceFilter: 0,
+          accuracy: LocationAccuracy.high,
+        );
+
+        location.onLocationChanged.listen((LocationData currentLocation) async {
+          if (userIdActual != null) {
+            try {
+              await Supabase.instance.client.from('locations').upsert({
+                'id_user': userIdActual,
+                'latitude': currentLocation.latitude,
+                'longitude': currentLocation.longitude,
+                'timestamp': DateTime.now().toIso8601String(),
+                'status': true,
+              }, onConflict: 'id_user');
+            } catch (e) {
+              print('Error al enviar ubicación: $e');
+            }
+          }
+        });
+      }
+    }
+  }
+
+  static void startCallback() {
+    FlutterForegroundTask.setTaskHandler(LocationTaskHandler());
+  }
+
   Future<void> _login() async {
     setState(() {
       _loading = true;
@@ -31,42 +124,22 @@ class _LoginPageState extends State<LoginPage> {
           .from('users')
           .select('id, email')
           .eq('email', email)
-          .eq('password', password) // En producción, usa hash
+          .eq('password', password)
           .maybeSingle();
 
       final userId = response != null ? response['id'] : null;
       final userEmail = response != null ? response['email'] : null;
 
       if (userId != null) {
-        // ✅ Guardar el usuario logueado en variables globales
         userIdActual = userId;
         userEmailActual = userEmail;
 
-        // Verificar si el usuario ya tiene registro en locations
-        final location = await Supabase.instance.client
-            .from('locations')
-            .select('id')
-            .eq('id_user', userId)
-            .maybeSingle();
+        // Iniciar el rastreo de ubicación
+        await _startLocationTracking();
 
-        if (location == null) {
-          // Si no existe, lo crea con status true y campos requeridos
-          await Supabase.instance.client.from('locations').insert({
-            'id_user': userId,
-            'status': true,
-            'timestamp': DateTime.now().toIso8601String(),
-            'latitude': 0.0,
-            'longitude': 0.0,
-          });
-        } else {
-          // Si existe, solo actualiza el status
-          await Supabase.instance.client
-              .from('locations')
-              .update({'status': true})
-              .eq('id_user', userId);
-        }
+        // Mostrar configuración de batería
+        await _openBatterySettings();
 
-        // Redirigir al home
         if (mounted) {
           Navigator.pushReplacementNamed(context, '/home');
         }
@@ -110,7 +183,9 @@ class _LoginPageState extends State<LoginPage> {
                   labelText: 'Contraseña',
                   suffixIcon: IconButton(
                     icon: Icon(
-                      _obscurePassword ? Icons.visibility_off : Icons.visibility,
+                      _obscurePassword
+                          ? Icons.visibility_off
+                          : Icons.visibility,
                     ),
                     onPressed: () {
                       setState(() {
@@ -138,6 +213,7 @@ class _LoginPageState extends State<LoginPage> {
                     ? const CircularProgressIndicator()
                     : const Text('Iniciar sesión'),
               ),
+              const SizedBox(height: 20),
             ],
           ),
         ),

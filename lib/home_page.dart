@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:flutter_foreground_task/flutter_foreground_task.dart';
 import 'crear_proyecto_page.dart';
 import 'mapa_page.dart';
 import 'sesion.dart';
@@ -66,12 +67,17 @@ class HomePage extends StatelessWidget {
               icon: const Icon(Icons.logout),
               onPressed: () async {
                 if (userIdActual != null) {
+                  // Actualizar el estado del usuario en la base de datos
                   await Supabase.instance.client
                       .from('locations')
                       .update({'status': false})
                       .eq('id_user', userIdActual!);
                 }
+                // Detener el servicio en segundo plano
+                await FlutterForegroundTask.stopService();
+                // Cerrar sesión en Supabase
                 await Supabase.instance.client.auth.signOut();
+                // Navegar a la pantalla de inicio de sesión
                 Navigator.pushReplacementNamed(context, '/login');
               },
             ),
@@ -276,8 +282,7 @@ class HomePage extends StatelessWidget {
                         builder: (_) => MapaPage(
                           proyectoId: territorio['id'], // ID del proyecto
                           colaborativo:
-                              territorio['colaborativo'] ??
-                              false, // Si es colaborativo
+                              territorio['colaborativo'] ?? false, // Si es colaborativo
                         ),
                       ),
                     );

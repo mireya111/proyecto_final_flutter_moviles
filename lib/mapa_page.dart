@@ -313,6 +313,15 @@ class _MapaPageState extends State<MapaPage> {
     return true;
   }
 
+  double _determinarZoomDesdeArea(double area) {
+    if (area < 500) return 19;
+    if (area < 2000) return 18;
+    if (area < 10000) return 17;
+    if (area < 50000) return 16;
+    if (area < 200000) return 15;
+    return 14; // Más lejos para áreas grandes
+  }
+
   void _mostrarArea() {
     final area = _calcularArea();
     showDialog(
@@ -328,6 +337,18 @@ class _MapaPageState extends State<MapaPage> {
         ],
       ),
     );
+  }
+
+  LatLng _calcularCentro(List<LatLng> puntos) {
+    double lat = 0.0;
+    double lng = 0.0;
+
+    for (var punto in puntos) {
+      lat += punto.latitude;
+      lng += punto.longitude;
+    }
+
+    return LatLng(lat / puntos.length, lng / puntos.length);
   }
 
   @override
@@ -515,162 +536,85 @@ class _MapaPageState extends State<MapaPage> {
     );
   }
 
-  void _mostrarModalFinalizar(BuildContext context) {
-    bool cargandoImagen = false;
+  Future<void> _mostrarModalFinalizar(BuildContext context) async {
+    final area = _calcularArea();
+    final centro = _calcularCentro(puntos); // Usa los puntos del polígono
+    final zoom = _determinarZoomDesdeArea(area);
+
+    // Oculta los marcadores temporalmente
+    final Set<Marker> marcadoresOriginales = Set.from(_marcadores);
+    setState(() {
+      _marcadores.clear();
+    });
+
+    // Mueve la cámara para centrar el polígono
+    await mapController?.animateCamera(
+      CameraUpdate.newCameraPosition(
+        CameraPosition(target: centro, zoom: zoom),
+      ),
+    );
+
+    // Espera un pequeño delay adicional por seguridad (opcional)
+    await Future.delayed(const Duration(milliseconds: 400));
+
+    // Muestra el modal con el área calculada
     showDialog(
       context: context,
-      builder: (context) {
-        return StatefulBuilder(
-          builder: (context, setStateDialog) {
-            return AlertDialog(
-              title: const Text('Finalizar Escaneo'),
-              content: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Container(
-                    height: 150,
-                    width: double.infinity,
-                    decoration: BoxDecoration(
-                      border: Border.all(color: Colors.grey),
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: cargandoImagen
-                        ? const Center(
-                            child:
-                                CircularProgressIndicator(), // Indicador de carga
-                          )
-                        : const Center(
-                            child: Text(
-                              'Se generará una captura del mapa con las líneas y el área completa.',
-                              style: TextStyle(color: Colors.grey),
-                            ),
-                          ),
-                  ),
-                ],
-              ),
-              actions: [
-                ElevatedButton(
-                  onPressed: () async {
-                    setStateDialog(() {
-                      cargandoImagen = true; // Activa el estado de carga
-                    });
+      builder: (context) => AlertDialog(
+        title: const Text("Área calculada"),
+        content: Text(
+          "El área del polígono es de ${area.toStringAsFixed(2)} m²",
+        ),
+        actions: [
+          TextButton(
+            onPressed: () async {
+              Navigator.of(context).pop();
 
-                    try {
-                      setState(() {
-                        finalizado = true;
-                      });
-                      _dibujarPoligono();
-                      // Guardar los marcadores originales
-                      final Set<Marker> marcadoresOriginales = Set.from(
-                        _marcadores,
-                      );
+              // Toma la captura del mapa
+              final Uint8List? captura = await mapController?.takeSnapshot();
 
-                      // Ocultar los marcadores temporalmente
-                      setState(() {
-                        _marcadores.clear();
-                      });
+              if (captura != null) {
+                // Subir la captura al almacenamiento de Supabase
+                final fileName =
+                    'captura_mapa_${widget.proyectoId}_${DateTime.now().millisecondsSinceEpoch}.png';
+                await Supabase.instance.client.storage
+                    .from('uploads')
+                    .uploadBinary(fileName, captura);
 
-                      // Ajustar la cámara para incluir todos los puntos
-                      if (puntos.isNotEmpty) {
-                        final bounds = _calcularLimitesDePuntos(puntos);
-                        await mapController?.animateCamera(
-                          CameraUpdate.newLatLngBounds(
-                            bounds,
-                            20,
-                          ), // Margen de 50px
-                        );
-                      }
+                final imageUrl = Supabase.instance.client.storage
+                    .from('uploads')
+                    .getPublicUrl(fileName);
 
-                      // Capturar el mapa
-                      final Uint8List? captura = await mapController
-                          ?.takeSnapshot();
+                // Actualizar el territorio con la URL de la imagen
+                await Supabase.instance.client
+                    .from('territories')
+                    .update({'imagen_poligono': imageUrl, 'finalizado': true})
+                    .eq('id', widget.proyectoId);
 
-                      // Restaurar los marcadores
-                      setState(() {
-                        _marcadores.addAll(marcadoresOriginales);
-                      });
+                if (context.mounted) {
+                  Navigator.pushNamedAndRemoveUntil(
+                    context,
+                    '/home',
+                    (route) => false,
+                  );
+                }
+              } else {
+                if (context.mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Error al capturar el mapa')),
+                  );
+                }
+              }
 
-                      if (captura != null) {
-                        // Subir la captura al almacenamiento de Supabase
-                        final fileName =
-                            'captura_mapa_${widget.proyectoId}_${DateTime.now().millisecondsSinceEpoch}.png';
-                        await Supabase.instance.client.storage
-                            .from('uploads')
-                            .uploadBinary(fileName, captura);
-
-                        final imageUrl = Supabase.instance.client.storage
-                            .from('uploads')
-                            .getPublicUrl(fileName);
-
-                        // Actualizar el territorio con la URL de la imagen
-                        await Supabase.instance.client
-                            .from('territories')
-                            .update({
-                              'imagen_poligono': imageUrl,
-                              'finalizado': true,
-                            })
-                            .eq('id', widget.proyectoId);
-
-                        if (context.mounted) {
-                          Navigator.pushNamedAndRemoveUntil(
-                            context,
-                            '/home',
-                            (route) => false,
-                          );
-                        }
-                      } else {
-                        throw Exception('No se pudo capturar el mapa');
-                      }
-                    } catch (e) {
-                      print('Error al capturar o subir la imagen: $e');
-                      if (context.mounted) {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(
-                            content: Text(
-                              'Error al capturar o subir la imagen',
-                            ),
-                          ),
-                        );
-                      }
-                    } finally {
-                      setStateDialog(() {
-                        cargandoImagen = false; // Desactiva el estado de carga
-                      });
-                    }
-                  },
-                  child: const Text('Capturar y Subir'),
-                ),
-                ElevatedButton(
-                  onPressed: () {
-                    Navigator.of(context).pop();
-                  },
-                  child: const Text('Regresar al Proyecto'),
-                ),
-              ],
-            );
-          },
-        );
-      },
-    );
-  }
-
-  // Método para calcular los límites de los puntos seleccionados
-  LatLngBounds _calcularLimitesDePuntos(List<LatLng> puntos) {
-    double minLat = puntos.first.latitude;
-    double maxLat = puntos.first.latitude;
-    double minLng = puntos.first.longitude;
-    double maxLng = puntos.first.longitude;
-
-    for (var punto in puntos) {
-      if (punto.latitude < minLat) minLat = punto.latitude;
-      if (punto.latitude > maxLat) maxLat = punto.latitude;
-      if (punto.longitude < minLng) minLng = punto.longitude;
-      if (punto.longitude > maxLng) maxLng = punto.longitude;
-    }
-
-    return LatLngBounds(
-      southwest: LatLng(minLat, minLng),
-      northeast: LatLng(maxLat, maxLng),
+              // Restaura los marcadores después de la captura
+              setState(() {
+                _marcadores.addAll(marcadoresOriginales);
+              });
+            },
+            child: const Text("Aceptar"),
+          ),
+        ],
+      ),
     );
   }
 

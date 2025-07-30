@@ -96,7 +96,11 @@ class HomePage extends StatelessWidget {
                     );
                   }
                 }
+                try{
                 await FlutterForegroundTask.stopService();
+                } catch (e) {
+                  print('Error al detener el servicio en segundo plano: $e');
+                }
                 await Supabase.instance.client.auth.signOut();
                 if (context.mounted) {
                   Navigator.pushReplacementNamed(context, '/login');

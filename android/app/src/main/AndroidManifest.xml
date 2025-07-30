@@ -12,7 +12,7 @@
 
 
     <application
-        android:label="Topografía DAM2"
+        android:label="Topografía"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher"
         android:roundIcon="@mipmap/ic_launcher">

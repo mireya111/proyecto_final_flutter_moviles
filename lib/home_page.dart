@@ -5,6 +5,7 @@ import 'package:flutter_foreground_task/flutter_foreground_task.dart';
 import 'crear_proyecto_page.dart';
 import 'mapa_page.dart';
 import 'sesion.dart';
+import 'usuarios_mapa.dart';
 
 class HomePage extends StatelessWidget {
   const HomePage({super.key});
@@ -29,6 +30,25 @@ class HomePage extends StatelessWidget {
         .order('created_at', ascending: false);
   }
 
+  Future<List<Map<String, dynamic>>> _obtenerUbicacionesUsuarios() async {
+    final response = await Supabase.instance.client
+        .from('locations')
+        .select('id_user, users(username, id), latitude, longitude, status')
+        .eq('status', true);
+
+    final data = response as List<dynamic>? ?? [];
+    return data.map<Map<String, dynamic>>((item) {
+      return {
+        'id_user': item['id_user'],
+        'username': item['users']?['username'] ?? '',
+        'user_id': item['users']?['id'] ?? '',
+        'latitude': item['latitude'],
+        'longitude': item['longitude'],
+        'status': item['status'],
+      };
+    }).toList();
+  }
+
   String _formatearFecha(String? fecha) {
     if (fecha == null) return 'Fecha no disponible';
     try {
@@ -42,7 +62,7 @@ class HomePage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return DefaultTabController(
-      length: 2, // Número de pestañas
+      length: 3, // Número de pestañas
       child: Scaffold(
         appBar: AppBar(
           title: const Text('Territorios Topográficos'),
@@ -50,6 +70,7 @@ class HomePage extends StatelessWidget {
             tabs: [
               Tab(text: 'Mis proyectos'),
               Tab(text: 'Invitaciones'),
+              Tab(text: 'Usuarios en mapa'),
             ],
           ),
           actions: [
@@ -89,6 +110,8 @@ class HomePage extends StatelessWidget {
             _buildMisProyectos(),
             // Página "Invitaciones"
             _buildInvitaciones(),
+            // Página "Usuarios en mapa"
+            _buildUsuariosMapaTab(context), 
           ],
         ),
         floatingActionButton: FloatingActionButton(
@@ -293,6 +316,26 @@ class HomePage extends StatelessWidget {
           },
         );
       },
+    );
+  }
+
+  // Pega aquí tu método:
+  Widget _buildUsuariosMapaTab(BuildContext context) {
+    return Center(
+      child: ElevatedButton.icon(
+        icon: const Icon(Icons.location_on),
+        label: const Text('Ver usuarios en mapa'),
+        onPressed: () async {
+          final usuarios = await _obtenerUbicacionesUsuarios();
+          if (context.mounted) {
+            Navigator.pushNamed(
+              context,
+              '/usuarios_mapa',
+              arguments: usuarios,
+            );
+          }
+        },
+      ),
     );
   }
 }

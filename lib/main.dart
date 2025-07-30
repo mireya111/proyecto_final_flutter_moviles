@@ -4,6 +4,7 @@ import 'login.dart';
 import 'home_page.dart';
 import 'crear_proyecto_page.dart';
 import 'mapa_page.dart';
+import 'usuarios_mapa.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -55,6 +56,12 @@ class MyApp extends StatelessWidget {
               proyectoId: args['proyectoId'],
               colaborativo: args['colaborativo'],
             ),
+          );
+        }
+        if (settings.name == '/usuarios_mapa') {
+          final usuarios = settings.arguments as List<Map<String, dynamic>>;
+          return MaterialPageRoute(
+            builder: (_) => UsuariosMapaPage(usuarios: usuarios),
           );
         }
         return null;

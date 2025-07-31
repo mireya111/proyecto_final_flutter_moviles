@@ -536,86 +536,180 @@ class _MapaPageState extends State<MapaPage> {
     );
   }
 
-  Future<void> _mostrarModalFinalizar(BuildContext context) async {
-    final area = _calcularArea();
-    final centro = _calcularCentro(puntos); // Usa los puntos del polígono
-    final zoom = _determinarZoomDesdeArea(area);
-
-    // Oculta los marcadores temporalmente
-    final Set<Marker> marcadoresOriginales = Set.from(_marcadores);
-    setState(() {
-      _marcadores.clear();
-    });
-
-    // Mueve la cámara para centrar el polígono
-    await mapController?.animateCamera(
-      CameraUpdate.newCameraPosition(
-        CameraPosition(target: centro, zoom: zoom),
-      ),
-    );
-
-    // Espera un pequeño delay adicional por seguridad (opcional)
-    await Future.delayed(const Duration(milliseconds: 400));
-
-    // Muestra el modal con el área calculada
+  void _mostrarModalFinalizar(BuildContext context) {
+    bool cargandoImagen = false;
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text("Área calculada"),
-        content: Text(
-          "El área del polígono es de ${area.toStringAsFixed(2)} m²",
-        ),
-        actions: [
-          TextButton(
-            onPressed: () async {
-              Navigator.of(context).pop();
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (context, setStateDialog) {
+            return AlertDialog(
+              title: const Text('Finalizar Escaneo'),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(
+                    height: 150,
+                    width: double.infinity,
+                    decoration: BoxDecoration(
+                      border: Border.all(color: Colors.grey),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: cargandoImagen
+                        ? const Center(child: CircularProgressIndicator())
+                        : const Center(
+                            child: Text(
+                              'Se generará una captura del mapa con las líneas y el área completa.',
+                              style: TextStyle(color: Colors.grey),
+                            ),
+                          ),
+                  ),
+                ],
+              ),
+              actions: [
+                ElevatedButton(
+                  onPressed: () async {
+                    setStateDialog(() {
+                      cargandoImagen = true; // Activa el estado de carga
+                    });
 
-              // Toma la captura del mapa
-              final Uint8List? captura = await mapController?.takeSnapshot();
+                    try {
+                      setState(() {
+                        finalizado = true;
+                      });
 
-              if (captura != null) {
-                // Subir la captura al almacenamiento de Supabase
-                final fileName =
-                    'captura_mapa_${widget.proyectoId}_${DateTime.now().millisecondsSinceEpoch}.png';
-                await Supabase.instance.client.storage
-                    .from('uploads')
-                    .uploadBinary(fileName, captura);
+                      // Dibujar el polígono con zIndex para que se muestre por encima
+                      _dibujarPoligonoConZIndex();
 
-                final imageUrl = Supabase.instance.client.storage
-                    .from('uploads')
-                    .getPublicUrl(fileName);
+                      // Guardar los marcadores originales
+                      final Set<Marker> marcadoresOriginales = Set.from(
+                        _marcadores,
+                      );
 
-                // Actualizar el territorio con la URL de la imagen
-                await Supabase.instance.client
-                    .from('territories')
-                    .update({'imagen_poligono': imageUrl, 'finalizado': true})
-                    .eq('id', widget.proyectoId);
+                      // Ocultar los marcadores y deshabilitar la ubicación del usuario
+                      setState(() {
+                        _marcadores.clear();
+                      });
 
-                if (context.mounted) {
-                  Navigator.pushNamedAndRemoveUntil(
-                    context,
-                    '/home',
-                    (route) => false,
-                  );
-                }
-              } else {
-                if (context.mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Error al capturar el mapa')),
-                  );
-                }
-              }
+                      // Calcular el área y el punto medio
+                      final area = _calcularArea();
+                      final puntoMedio = _calcularCentro(puntos);
+                      final zoom = _determinarZoomDesdeArea(area);
 
-              // Restaura los marcadores después de la captura
-              setState(() {
-                _marcadores.addAll(marcadoresOriginales);
-              });
-            },
-            child: const Text("Aceptar"),
-          ),
-        ],
-      ),
+                      // Ajustar la cámara al punto medio y al zoom calculado
+                      await mapController?.animateCamera(
+                        CameraUpdate.newLatLngZoom(puntoMedio, zoom),
+                      );
+
+                      // Capturar el mapa
+                      final Uint8List? captura = await mapController
+                          ?.takeSnapshot();
+
+                      // Restaurar los marcadores y la ubicación del usuario
+                      setState(() {
+                        _marcadores.addAll(marcadoresOriginales);
+                      });
+
+                      if (captura != null) {
+                        // Subir la captura al almacenamiento de Supabase
+                        final fileName =
+                            'captura_mapa_${widget.proyectoId}_${DateTime.now().millisecondsSinceEpoch}.png';
+                        await Supabase.instance.client.storage
+                            .from('uploads')
+                            .uploadBinary(fileName, captura);
+
+                        final imageUrl = Supabase.instance.client.storage
+                            .from('uploads')
+                            .getPublicUrl(fileName);
+
+                        // Actualizar el territorio con la URL de la imagen
+                        await Supabase.instance.client
+                            .from('territories')
+                            .update({
+                              'imagen_poligono': imageUrl,
+                              'finalizado': true,
+                            })
+                            .eq('id', widget.proyectoId);
+
+                        if (context.mounted) {
+                          Navigator.pushNamedAndRemoveUntil(
+                            context,
+                            '/home',
+                            (route) => false,
+                          );
+                        }
+                      } else {
+                        throw Exception('No se pudo capturar el mapa');
+                      }
+                    } catch (e) {
+                      print('Error al capturar o subir la imagen: $e');
+                      if (context.mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text(
+                              'Error al capturar o subir la imagen',
+                            ),
+                          ),
+                        );
+                      }
+                    } finally {
+                      setStateDialog(() {
+                        cargandoImagen = false; // Desactiva el estado de carga
+                      });
+                    }
+                  },
+                  child: const Text('Capturar y Subir'),
+                ),
+                ElevatedButton(
+                  onPressed: () {
+                    Navigator.of(context).pop();
+                  },
+                  child: const Text('Regresar al Proyecto'),
+                ),
+              ],
+            );
+          },
+        );
+      },
     );
+  }
+
+  // Función para dibujar el polígono con zIndex
+  void _dibujarPoligonoConZIndex() {
+    _poligonos.clear();
+    if (puntos.length > 2) {
+      final puntosPoligono = List<LatLng>.from(puntos);
+      if (puntosPoligono.first != puntosPoligono.last) {
+        puntosPoligono.add(puntosPoligono.first);
+      }
+
+      final nuevoPoligono = Polygon(
+        polygonId: const PolygonId('poligono1'),
+        points: puntosPoligono,
+        fillColor: const Color.fromARGB(100, 33, 150, 243),
+        strokeColor: Colors.blue,
+        strokeWidth: 3,
+        zIndex: 1,
+      );
+      _poligonos.add(nuevoPoligono);
+    }
+
+    _polilineas.clear();
+    if (puntos.length > 1) {
+      _polilineas.add(
+        Polyline(
+          polylineId: const PolylineId('linea1'),
+          points: puntos,
+          color: Colors.blue,
+          width: 3,
+          zIndex: 1,
+        ),
+      );
+    }
+
+    if (mounted) {
+      setState(() {});
+    }
   }
 
   Future<void> _marcarUbicacionActual() async {

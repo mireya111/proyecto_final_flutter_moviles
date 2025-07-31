@@ -1,0 +1,4 @@
+storePassword=contraseña_definida
+keyPassword=contraseña_definida
+keyAlias=alias_de_la_keystore
+storeFile=url\\absoluta\\del\\archivo\\con_el_keystore.jks

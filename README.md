@@ -9,6 +9,11 @@
 - García Mireya
 - Torres Mateo
 ---
+## Evidencias
+<img width="738" height="1600" alt="image" src="https://github.com/user-attachments/assets/846da543-2c63-4457-adc4-da32237f3fb8" />
+
+
+---
 ## 📑 Tabla de contenido
 - [Características principales](#características-principales)
 - [Librerías utilizadas](#librerías-utilizadas-y-su-propósito)

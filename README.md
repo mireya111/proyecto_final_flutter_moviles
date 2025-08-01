@@ -9,9 +9,17 @@
 - García Mireya
 - Torres Mateo
 ---
-## Evidencias
-<img width="738" height="1600" alt="image" src="https://github.com/user-attachments/assets/846da543-2c63-4457-adc4-da32237f3fb8" />
 
+## Evidencias
+<img width="150" height="400" alt="image" src="https://github.com/user-attachments/assets/846da543-2c63-4457-adc4-da32237f3fb8" />
+<img width="150" height="400" alt="image" src="https://github.com/user-attachments/assets/c286456a-2f6f-4f5a-a8d6-d7028a5919b1" />
+<img width="150" height="400" alt="image" src="https://github.com/user-attachments/assets/a8019531-5194-41bd-b72b-3cdd95e7a790" />
+<img width="150" height="400" alt="image" src="https://github.com/user-attachments/assets/7bcfc0c0-bd2b-4f7a-959d-1032cc191b0f" />
+<img width="150" height="400" alt="image" src="https://github.com/user-attachments/assets/2d57b3ed-9839-4a00-9ac5-a282220d42e3" />
+<img width="150" height="400" alt="image" src="https://github.com/user-attachments/assets/07b579be-4677-41d3-918e-7cbcc7dfc776" />
+<img width="150" height="400" alt="image" src="https://github.com/user-attachments/assets/970e154b-339c-466f-bc8f-205e35a2cd24" />
+<img width="150" height="400" alt="image" src="https://github.com/user-attachments/assets/d2cb4545-8b3e-496d-b83b-8a4e570e08f5" />
+<img width="150" height="400" alt="image" src="https://github.com/user-attachments/assets/df5e76cc-0ca3-4e8b-83f9-2ce65a29a806" />
 
 ---
 ## 📑 Tabla de contenido
